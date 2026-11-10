@@ -22,7 +22,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   final _applianceService = ApplianceService();
   final _hardwareService = HardwareSerialService();
 
-  AnalyticsTimeRange _selectedRange = AnalyticsTimeRange.sixHours;
+  AnalyticsTimeRange _selectedRange = AnalyticsTimeRange.allTime;
   String? _selectedApplianceId;
   DateTimeRange? _customRange;
 
@@ -110,15 +110,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             : _sensorService.allReadings;
 
         // Filter by time range
-        final filteredReadings = SensorAnalyticsService.filterReadings(
+        var filteredReadings = SensorAnalyticsService.filterReadings(
           allReadings,
           _selectedRange,
           customRange: _customRange,
         );
 
+        // Fallback: if time-range yields empty but records exist, show all readings
+        if (filteredReadings.isEmpty && allReadings.isNotEmpty) {
+          filteredReadings = List.from(allReadings);
+        }
+
         final summary = SensorAnalyticsService.computeAnalytics(filteredReadings);
         final hasData = filteredReadings.isNotEmpty;
-        final isLive = _hardwareService.isActive;
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -140,10 +144,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Live Stream Status Badge
-                  _buildLiveStatusBanner(isLive, filteredReadings.length),
-                  const SizedBox(height: 14),
-
                   // Appliance Selector Filter (if multiple appliances exist)
                   if (appliances.isNotEmpty) ...[
                     _buildApplianceFilter(appliances),
@@ -223,56 +223,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // SUB-WIDGETS
   // ===========================================================================
 
-  Widget _buildLiveStatusBanner(bool isLive, int pointCount) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: isLive
-            ? const Color(0xFF10B981).withValues(alpha: 0.08)
-            : Colors.grey.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isLive
-              ? const Color(0xFF10B981).withValues(alpha: 0.25)
-              : Colors.grey.withValues(alpha: 0.25),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isLive ? const Color(0xFF10B981) : Colors.grey,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isLive ? 'Real-Time Hardware Stream Active (COM3)' : 'Viewing Stored Telemetry History',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isLive ? const Color(0xFF047857) : Colors.grey[700],
-                ),
-              ),
-            ],
-          ),
-          Text(
-            '$pointCount points',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: isLive ? const Color(0xFF047857) : AppColors.secondaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildApplianceFilter(List<ApplianceModel> appliances) {
     return Container(

@@ -94,84 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Optional technical device information sheet
-  void _openDeviceDetailsSheet(ApplianceModel? appliance) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    const Icon(Icons.memory_rounded, color: AppColors.primaryBlue),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Monitoring Device Details',
-                      style: AppTextStyles.heading2.copyWith(fontSize: 18),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildInfoRow('Connection Port', _hardwareService.activePort),
-                const Divider(height: 16),
-                _buildInfoRow('Communication Mode', _hardwareService.isSimulated ? 'Simulated' : 'USB Serial'),
-                const Divider(height: 16),
-                _buildInfoRow('Packets Received', '${_hardwareService.totalPacketsReceived}'),
-                const Divider(height: 16),
-                _buildInfoRow('Cloud Sync Interval', '${_hardwareService.cloudSyncIntervalSeconds} seconds'),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      if (_hardwareService.isActive) {
-                        _hardwareService.disconnect();
-                      } else {
-                        _hardwareService.connect();
-                      }
-                    },
-                    child: Text(_hardwareService.isActive ? 'Disconnect Device' : 'Reconnect Device'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.secondaryText)),
-        Text(value, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -401,49 +324,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        // Device Connection Indicator Pill
-        InkWell(
-          onTap: () => _openDeviceDetailsSheet(primaryAppliance),
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isHardwareLive
-                  ? const Color(0xFF10B981).withValues(alpha: 0.12)
-                  : Colors.grey.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isHardwareLive
-                    ? const Color(0xFF10B981).withValues(alpha: 0.3)
-                    : Colors.grey.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: isHardwareLive ? const Color(0xFF10B981) : Colors.grey,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isHardwareLive ? 'Online' : 'Standby',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isHardwareLive ? const Color(0xFF047857) : Colors.grey[700],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-
         // Notifications / Alerts icon
         IconButton(
           icon: const Icon(Icons.notifications_none_rounded, color: AppColors.darkText),
@@ -581,30 +461,13 @@ class _HomeScreenState extends State<HomeScreen> {
             conditionSubtitle,
             style: AppTextStyles.bodyMedium,
           ),
-          const Divider(height: 24, color: AppColors.dividerColor),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isLive ? Icons.sensors_rounded : Icons.history_rounded,
-                    size: 16,
-                    color: AppColors.secondaryText,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isLive ? 'Real-Time Live Stream' : 'Cached Telemetry',
-                    style: AppTextStyles.caption,
-                  ),
-                ],
-              ),
-              Text(
-                lastUpdate != null ? _formatTimeAgo(lastUpdate) : 'No timestamp',
-                style: AppTextStyles.caption,
-              ),
-            ],
-          ),
+          if (lastUpdate != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Updated ${_formatTimeAgo(lastUpdate)}',
+              style: AppTextStyles.caption.copyWith(fontSize: 11),
+            ),
+          ],
         ],
       ),
     );
@@ -960,7 +823,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () {
             Navigator.pushNamed(
               context,
-              '/appliance-details',
+              '/sensor-status',
               arguments: appliance,
             );
           },

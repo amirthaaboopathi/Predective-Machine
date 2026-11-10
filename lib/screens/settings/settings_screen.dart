@@ -3,10 +3,13 @@ import '../../services/auth_service.dart';
 import '../../services/appliance_service.dart';
 import '../../services/analysis_service.dart';
 import '../../services/gemini_chat_service.dart';
+import '../../services/theme_service.dart';
+import '../../services/hardware_serial_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_text_styles.dart';
 
-/// Settings screen matching the modern Medica-inspired visual language.
+/// Settings screen providing account management, theme customization,
+/// hardware device diagnostics, and cloud synchronization controls.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -15,6 +18,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final _themeService = ThemeService();
+  final _hardwareService = HardwareSerialService();
+
   bool _notificationsEnabled = true;
 
   Future<void> _showLogoutDialog() async {
@@ -64,21 +70,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _showThemeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Choose Theme'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.brightness_auto_rounded),
+                title: const Text('System Default'),
+                trailing: _themeService.themeMode == ThemeMode.system
+                    ? const Icon(Icons.check_rounded, color: AppColors.primaryBlue)
+                    : null,
+                onTap: () {
+                  _themeService.setThemeMode(ThemeMode.system);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.light_mode_rounded),
+                title: const Text('Light Mode'),
+                trailing: _themeService.themeMode == ThemeMode.light
+                    ? const Icon(Icons.check_rounded, color: AppColors.primaryBlue)
+                    : null,
+                onTap: () {
+                  _themeService.setThemeMode(ThemeMode.light);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.dark_mode_rounded),
+                title: const Text('Dark Mode'),
+                trailing: _themeService.themeMode == ThemeMode.dark
+                    ? const Icon(Icons.check_rounded, color: AppColors.primaryBlue)
+                    : null,
+                onTap: () {
+                  _themeService.setThemeMode(ThemeMode.dark);
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = AuthService();
 
     return ListenableBuilder(
-      listenable: authService,
+      listenable: Listenable.merge([authService, _themeService, _hardwareService]),
       builder: (context, _) {
         final user = authService.currentUser;
         final userName = user?.displayName ?? 'User';
         final userEmail = user?.email ?? 'user@example.com';
+        final isHardwareLive = _hardwareService.isActive;
+
+        String themeLabel = 'System';
+        if (_themeService.themeMode == ThemeMode.dark) themeLabel = 'Dark Mode';
+        if (_themeService.themeMode == ThemeMode.light) themeLabel = 'Light Mode';
 
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: const Text('Settings'),
+            title: const Text('Settings & Configuration'),
             automaticallyImplyLeading: false,
           ),
           body: SafeArea(
@@ -161,12 +222,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ]),
                   const SizedBox(height: 20),
 
-                  // Application Section
-                  _buildSectionHeader('APPLICATION'),
+                  // Hardware & IoT Diagnostics Section
+                  _buildSectionHeader('MONITORING HARDWARE & CLOUD'),
                   _buildSettingCard([
+                    _buildSettingTile(
+                      icon: Icons.sensors_rounded,
+                      title: 'Device Connection Status',
+                      trailingText: isHardwareLive ? 'Online (COM3)' : 'Standby',
+                      trailingColor: isHardwareLive ? const Color(0xFF10B981) : Colors.grey,
+                      onTap: () {
+                        if (!isHardwareLive) {
+                          _hardwareService.connect('COM3');
+                        }
+                      },
+                    ),
+                    const Divider(height: 1, color: AppColors.dividerColor),
+                    _buildSwitchTile(
+                      icon: Icons.cloud_sync_rounded,
+                      title: 'Auto-Sync to Supabase Cloud',
+                      value: _hardwareService.autoSyncToCloud,
+                      onChanged: (val) {
+                        _hardwareService.setAutoSyncToCloud(val);
+                      },
+                    ),
+                    const Divider(height: 1, color: AppColors.dividerColor),
+                    _buildSettingTile(
+                      icon: Icons.speed_rounded,
+                      title: 'Total Telemetry Packets',
+                      trailingText: '${_hardwareService.totalPacketsReceived} received',
+                      onTap: () {},
+                    ),
+                  ]),
+                  const SizedBox(height: 20),
+
+                  // Appearance & Application Section
+                  _buildSectionHeader('APPEARANCE & APPLICATION'),
+                  _buildSettingCard([
+                    _buildSettingTile(
+                      icon: Icons.palette_outlined,
+                      title: 'App Theme',
+                      trailingText: themeLabel,
+                      onTap: _showThemeDialog,
+                    ),
+                    const Divider(height: 1, color: AppColors.dividerColor),
                     _buildSwitchTile(
                       icon: Icons.notifications_none_rounded,
-                      title: 'Notifications',
+                      title: 'Notifications & Alerts',
                       value: _notificationsEnabled,
                       onChanged: (val) {
                         setState(() {
@@ -174,20 +275,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         });
                       },
                     ),
-                    const Divider(height: 1, color: AppColors.dividerColor),
-                    _buildSettingTile(
-                      icon: Icons.tune_rounded,
-                      title: 'App Preferences',
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('App preferences set to default.'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
-                    ),
                   ]),
+                  const SizedBox(height: 20),
+
                   // AI Assistant Section
                   _buildSectionHeader('AI & DIAGNOSTICS'),
                   _buildSettingCard([
@@ -208,22 +298,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: () {
                         showAboutDialog(
                           context: context,
-                          applicationName: 'MyAppliance',
-                          applicationVersion: '1.0.0',
-                          applicationLegalese: 'Appliance Health Checker',
+                          applicationName: 'MyAppliance Monitor',
+                          applicationVersion: '2.0.0',
+                          applicationLegalese: 'Smart Appliance Monitoring & Predictive Failure System',
                         );
                       },
                     ),
                     const Divider(height: 1, color: AppColors.dividerColor),
                     _buildSettingTile(
                       icon: Icons.info_outline_rounded,
-                      title: 'About MyAppliance',
+                      title: 'About Smart Appliance Monitor',
                       onTap: () {
                         showAboutDialog(
                           context: context,
-                          applicationName: 'MyAppliance',
-                          applicationVersion: '1.0.0',
-                          applicationLegalese: '© 2026 MyAppliance Inc.',
+                          applicationName: 'MyAppliance Monitor',
+                          applicationVersion: '2.0.0',
+                          applicationLegalese: '© 2026 Smart Appliance Systems Inc.',
                         );
                       },
                     ),
@@ -290,14 +380,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSettingTile({
     required IconData icon,
     required String title,
+    String? trailingText,
+    Color? trailingColor,
     required VoidCallback onTap,
   }) {
     return ListTile(
       leading: Icon(icon, color: AppColors.darkText, size: 22),
       title: Text(title, style: AppTextStyles.bodyMedium),
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: AppColors.secondaryText,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (trailingText != null) ...[
+            Text(
+              trailingText,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: trailingColor ?? AppColors.secondaryText,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.secondaryText,
+          ),
+        ],
       ),
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

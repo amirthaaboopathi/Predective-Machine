@@ -11,6 +11,7 @@ import '../screens/home/appliance_details_screen.dart';
 import '../screens/home/analysis_screen.dart';
 import '../screens/home/health_check_screen.dart';
 import '../screens/home/result_screen.dart';
+import '../screens/home/sensor_status_screen.dart';
 import '../screens/settings/edit_profile_screen.dart';
 import '../screens/chat/chatbot_screen.dart';
 
@@ -23,6 +24,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String addAppliance = '/add-appliance';
   static const String applianceDetails = '/appliance-details';
+  static const String sensorStatus = '/sensor-status';
   static const String analysisScreen = '/analysis-screen';
   static const String healthCheck = '/health-check';
   static const String resultScreen = '/result-screen';
@@ -47,6 +49,11 @@ class AppRoutes {
         final appliance = settings.arguments as ApplianceModel;
         return MaterialPageRoute(
           builder: (_) => ApplianceDetailsScreen(appliance: appliance),
+        );
+      case sensorStatus:
+        final appliance = settings.arguments as ApplianceModel;
+        return MaterialPageRoute(
+          builder: (_) => SensorStatusScreen(appliance: appliance),
         );
       case analysisScreen:
         final appliance = settings.arguments as ApplianceModel;
