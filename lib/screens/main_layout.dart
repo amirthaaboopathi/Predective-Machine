@@ -3,9 +3,10 @@ import '../widgets/bottom_navigation.dart';
 import 'home/home_screen.dart';
 import 'analytics/analytics_screen.dart';
 import 'results/results_screen.dart';
+import 'alerts/alerts_screen.dart';
 import 'settings/settings_screen.dart';
 
-/// Main container layout holding the 4-tab bottom navigation and tab views.
+/// Main container layout holding the 5-tab bottom navigation and tab views.
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
 
@@ -29,9 +30,13 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      HomeScreen(onNavigateToAddAppliance: _navigateToAddAppliance),
+      HomeScreen(
+        onNavigateToAddAppliance: _navigateToAddAppliance,
+        onNavigateToTab: _onTabSelected,
+      ),
       const AnalyticsScreen(),
       const ResultsScreen(),
+      const AlertsScreen(),
       const SettingsScreen(),
     ];
 

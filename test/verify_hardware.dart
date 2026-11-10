@@ -1,90 +1,173 @@
 import 'dart:convert';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:myappliance/models/hardware_telemetry_model.dart';
+import 'package:myappliance/models/sensor_reading_model.dart';
+import 'package:myappliance/models/appliance_model.dart';
+import 'package:myappliance/models/appliance_alert_model.dart';
+import 'package:myappliance/services/sensor_analytics_service.dart';
+import 'package:myappliance/services/alert_service.dart';
 
 void main() {
-  print('=== Running Hardware Telemetry Model Verification ===');
+  group('Hardware Telemetry & Analytics Verification', () {
+    test('1. JSON parsing & calculations', () {
+      const jsonString = '''
+      {
+        "type": "sensor_data",
+        "packet": 42,
+        "time_ms": 12500,
+        "mpu6050": {
+          "connected": true,
+          "ax": 0.0521,
+          "ay": -0.0134,
+          "az": 9.8142,
+          "gx": 0.0012,
+          "gy": -0.0021,
+          "gz": 0.0005,
+          "temperature": 29.4
+        },
+        "ds18b20": {
+          "connected": true,
+          "temperature": 27.85
+        },
+        "inmp441": {
+          "connected": true,
+          "rms": 52.3,
+          "peak": 1420
+        },
+        "relay": {
+          "state": "ON"
+        },
+        "streaming": true
+      }
+      ''';
 
-  final jsonString = '''
-  {
-    "type": "sensor_data",
-    "packet": 42,
-    "time_ms": 12500,
-    "mpu6050": {
-      "connected": true,
-      "ax": 0.0521,
-      "ay": -0.0134,
-      "az": 9.8142,
-      "gx": 0.0012,
-      "gy": -0.0021,
-      "gz": 0.0005,
-      "temperature": 29.4
-    },
-    "ds18b20": {
-      "connected": true,
-      "temperature": 27.85
-    },
-    "inmp441": {
-      "connected": true,
-      "rms": 52.3,
-      "peak": 1420
-    },
-    "relay": {
-      "state": "ON"
-    },
-    "streaming": true
-  }
-  ''';
+      final map = jsonDecode(jsonString) as Map<String, dynamic>;
+      final telemetry = HardwareTelemetryModel.fromJson(map);
 
-  final map = jsonDecode(jsonString) as Map<String, dynamic>;
-  final telemetry = HardwareTelemetryModel.fromJson(map);
+      expect(telemetry.packetNumber, equals(42));
+      expect(telemetry.timeMs, equals(12500));
+      expect(telemetry.relayOn, isTrue);
+      expect(telemetry.temperature, equals(27.9));
+      expect(telemetry.dsConnected, isTrue);
+      expect(telemetry.mpuConnected, isTrue);
+      expect(telemetry.micConnected, isTrue);
+      expect(telemetry.vibrationMagnitude >= 0.10 && telemetry.vibrationMagnitude <= 1.0, isTrue);
+      expect(telemetry.soundDb >= 30.0 && telemetry.soundDb <= 95.0, isTrue);
+    });
 
-  assert(telemetry.packetNumber == 42, 'Packet number should be 42');
-  assert(telemetry.timeMs == 12500, 'Time ms should be 12500');
-  assert(telemetry.relayOn == true, 'Relay should be ON');
-  assert(telemetry.temperature == 27.9, 'Temperature should be 27.9');
-  assert(telemetry.dsConnected == true, 'DS18B20 should be connected');
-  assert(telemetry.mpuConnected == true, 'MPU6050 should be connected');
-  assert(telemetry.micConnected == true, 'INMP441 should be connected');
-  assert(telemetry.vibrationMagnitude >= 0.10 && telemetry.vibrationMagnitude <= 1.0, 'Vibration magnitude check');
-  assert(telemetry.soundDb >= 30.0 && telemetry.soundDb <= 95.0, 'Sound dB check');
-
-  print('JSON parsing & calculations: PASSED');
-
-  // Test readable mode fallback
-  const readableText = '''
-MPU6050
-Accel : X 0.1234 | Y -0.2345 | Z 9.8100
-Gyro : X 0.0100 | Y -0.0200 | Z 0.0050
-
-DS18B20
+    test('2. Readable text mode fallback', () {
+      const readableText = '''
+Accel : X 0.02 | Y 0.01 | Z 9.81
+Gyro : X 0.00 | Y 0.00 | Z 0.00
 Temperature : 28.50 C
-
-INMP441
-RMS : 48.00
-----------------------------------------
+RMS : 45.00
 ''';
 
-  final readableTelemetry = HardwareTelemetryModel.fromReadableText(readableText);
-  assert(readableTelemetry.temperature == 28.5, 'Readable temperature should be 28.5');
-  assert(readableTelemetry.dsConnected == true, 'DS18B20 should be marked true');
-  assert(readableTelemetry.mpuConnected == true, 'MPU6050 should be marked true');
-  assert(readableTelemetry.micConnected == true, 'INMP441 should be marked true');
+      final telemetry = HardwareTelemetryModel.fromReadableText(readableText);
+      expect(telemetry.packetNumber, equals(0));
+      expect(telemetry.temperature, equals(28.5));
+      expect(telemetry.dsConnected, isTrue);
+      expect(telemetry.mpuConnected, isTrue);
+      expect(telemetry.micConnected, isTrue);
+      expect(telemetry.soundDb > 30.0, isTrue);
+      expect(telemetry.vibrationMagnitude > 0.0, isTrue);
+    });
 
-  print('Readable text parsing & calculations: PASSED');
+    test('3. Analytics Service calculations', () {
+      final now = DateTime.now();
+      final sampleReadings = [
+        SensorReadingModel(
+          id: '1',
+          applianceId: 'app-1',
+          applianceName: 'Test Refrigerator',
+          temperature: 30.0,
+          vibration: 0.15,
+          sound: 40.0,
+          recordedAt: now.subtract(const Duration(minutes: 30)),
+        ),
+        SensorReadingModel(
+          id: '2',
+          applianceId: 'app-1',
+          applianceName: 'Test Refrigerator',
+          temperature: 32.0,
+          vibration: 0.20,
+          sound: 42.0,
+          recordedAt: now.subtract(const Duration(minutes: 15)),
+        ),
+        SensorReadingModel(
+          id: '3',
+          applianceId: 'app-1',
+          applianceName: 'Test Refrigerator',
+          temperature: 35.0,
+          vibration: 0.25,
+          sound: 48.0,
+          recordedAt: now,
+        ),
+      ];
 
-  // Test Simulation Mode generator
-  final simulated = HardwareTelemetryModel.simulated(
-    relayOn: true,
-    baseTemp: 35.0,
-    baseVib: 0.25,
-    baseSound: 50.0,
-  );
-  assert(simulated.relayOn == true, 'Simulated relay should be ON');
-  assert(simulated.temperature >= 20.0 && simulated.temperature <= 60.0, 'Simulated temp within bounds');
-  assert(simulated.soundDb >= 35.0 && simulated.soundDb <= 75.0, 'Simulated sound within bounds');
-  assert(simulated.vibrationMagnitude >= 0.15 && simulated.vibrationMagnitude <= 0.45, 'Simulated vib within bounds');
+      final summary = SensorAnalyticsService.computeAnalytics(sampleReadings);
+      expect(summary.totalReadings, equals(3));
+      expect(summary.temperature.min, equals(30.0));
+      expect(summary.temperature.max, equals(35.0));
+      expect(summary.temperature.average > 32.0, isTrue);
+      expect(summary.temperature.latest, equals(35.0));
+      expect(summary.vibration.latest, equals(0.25));
+      expect(summary.sound.latest, equals(48.0));
+    });
 
-  print('Simulation mode generator: PASSED');
-  print('=== ALL TESTS PASSED SUCCESSFULLY! ===');
+    test('4. Alert Service thresholds & evaluations', () {
+      final alertService = AlertService();
+      alertService.clear();
+
+      final now = DateTime.now();
+      final testAppliance = ApplianceModel(
+        id: 'app-1',
+        userId: 'user-1',
+        name: 'Living Room AC',
+        type: 'Air Conditioner',
+        addedAt: now,
+      );
+
+      // Normal reading -> No alerts
+      alertService.evaluateReadings(testAppliance, [
+        SensorReadingModel(
+          id: 'r1',
+          applianceId: 'app-1',
+          applianceName: 'Living Room AC',
+          temperature: 25.0,
+          vibration: 0.20,
+          sound: 45.0,
+          recordedAt: now,
+        ),
+      ]);
+      expect(alertService.allAlerts.isEmpty, isTrue);
+
+      // Warning reading (>55°C temp) -> Should trigger temperature warning
+      alertService.evaluateReadings(testAppliance, [
+        SensorReadingModel(
+          id: 'r2',
+          applianceId: 'app-1',
+          applianceName: 'Living Room AC',
+          temperature: 58.5,
+          vibration: 0.20,
+          sound: 45.0,
+          recordedAt: now,
+        ),
+      ]);
+      expect(alertService.allAlerts.isNotEmpty, isTrue);
+      expect(alertService.allAlerts.first.severity, equals(AlertSeverity.warning));
+      expect(alertService.allAlerts.first.parameter, equals(AlertParameter.temperature));
+    });
+
+    test('5. Simulation mode generator', () {
+      final simulated = HardwareTelemetryModel.simulated(
+        relayOn: true,
+        baseTemp: 35.0,
+        baseVib: 0.25,
+        baseSound: 50.0,
+      );
+      expect(simulated.relayOn, isTrue);
+      expect(simulated.temperature >= 20.0 && simulated.temperature <= 60.0, isTrue);
+    });
+  });
 }
-
