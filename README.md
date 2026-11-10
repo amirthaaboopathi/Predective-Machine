@@ -44,6 +44,23 @@ MyAppliance is a modern Flutter application built to monitor, diagnose, and main
 - Real-time appliance synchronization.
 - Historical telemetry logs and diagnostic records.
 
+### 5. ⚡ ESP32 Hardware Multi-Sensor Engine (COM3)
+- **Direct Serial Telemetry**: Connects natively to ESP32 / Arduino hardware via Win32 FFI on **COM3 @ 115200 baud**.
+- **Supported Sensors**:
+  - **MPU6050 (I2C: SDA=21, SCL=22)**: 3-Axis dynamic acceleration magnitude (vibration), gyro rotational rates, and internal temperature.
+  - **DS18B20 (OneWire: Pin=4)**: High-precision waterproof digital temperature probe.
+  - **INMP441 (I2S: SCK=26, WS=25, SD=33)**: 24-bit MEMS digital microphone capturing RMS noise floor and peak decibels.
+  - **Active-High Relay (Pin=27)**: Remote digital switching with bi-directional app control.
+- **Strict 1-to-1 Device-to-Appliance Binding**:
+  - Telemetry from a physical port (e.g., `COM3`) is routed and saved strictly for ONE appliance at a time.
+  - Multiple appliances can each be installed with their own distinct hardware device (e.g. `COM3`, `COM4`).
+- **Two-Way Hardware Control**:
+  - Commands: `RELAY_ON`, `RELAY_OFF`, `RELAY_TOGGLE`, `START`, `STOP`, `STATUS`, `OUTPUT_JSON`.
+- **Throttled Cloud Storage**:
+  - Automatically records live telemetry into Supabase `public.sensor_readings` every 5 seconds (with instant "Save Snapshot" button).
+- **Built-in Simulation Mode**:
+  - Test and demonstrate all gauges, relay switches, and cloud saving even when the physical hardware is unplugged.
+
 ---
 
 ## 📏 Sensor Health Benchmarks & Standards
