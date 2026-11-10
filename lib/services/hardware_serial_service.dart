@@ -566,26 +566,37 @@ class HardwareSerialService extends ChangeNotifier {
 
     // Retrieve which appliance is designated to this COM port
     final mappingService = HardwareMappingService();
-    final targetApplianceId = mappingService.getApplianceIdForPort(_activePort);
+    String? targetApplianceId = mappingService.getApplianceIdForPort(_activePort);
+    String targetName = 'Smart Appliance';
 
-    if (targetApplianceId == null) {
-      // No appliance is currently bound to this COM port
-      return false;
+    if (targetApplianceId != null) {
+      final appliance = ApplianceService().getApplianceById(targetApplianceId);
+      if (appliance != null) {
+        targetName = appliance.name;
+      }
+    } else if (ApplianceService().appliances.isNotEmpty) {
+      // Auto-bind the first available appliance to this active hardware port
+      final firstApp = ApplianceService().appliances.first;
+      targetApplianceId = firstApp.id;
+      targetName = firstApp.name;
+      mappingService.bindApplianceToPort(firstApp.id, _activePort);
     }
 
-    final appliance = ApplianceService().getApplianceById(targetApplianceId);
-    if (appliance == null) return false;
+    if (targetApplianceId == null) {
+      // No registered appliance found to associate this telemetry with yet
+      return false;
+    }
 
     try {
       final sensorService = SensorService();
       await sensorService.recordSensorReading(
-        applianceId: appliance.id,
-        applianceName: appliance.name,
+        applianceId: targetApplianceId,
+        applianceName: targetName,
         temperature: _latestTelemetry!.temperature,
         vibration: _latestTelemetry!.vibrationMagnitude,
         sound: _latestTelemetry!.soundDb,
       );
-      debugPrint('Cloud Telemetry stored for "${appliance.name}" ($_activePort)');
+      debugPrint('Cloud Telemetry stored for "$targetName" ($_activePort)');
       return true;
     } catch (e) {
       debugPrint('Failed to auto-save telemetry snapshot: $e');

@@ -49,6 +49,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _sensorService.fetchAllSensorReadings();
     _mappingService.init();
 
+    // Auto-connect to monitoring hardware on COM3 if not already active
+    if (!_hardwareService.isActive) {
+      _hardwareService.connect('COM3');
+    }
+
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
@@ -196,12 +201,10 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        // Live stream check
-        final isHardwareBound = primaryAppliance?.isHardwareMonitored ?? false;
-        final isHardwareLive = isHardwareBound &&
-            _hardwareService.isActive &&
-            _hardwareService.activePort == primaryAppliance?.hardwarePort;
-        final liveTelemetry = isHardwareLive ? _hardwareService.latestTelemetry : null;
+        // Live stream check - active hardware stream displays immediately
+        final isHardwareActive = _hardwareService.isActive;
+        final liveTelemetry = isHardwareActive ? _hardwareService.latestTelemetry : null;
+        final isHardwareLive = isHardwareActive && liveTelemetry != null;
 
         // Historical / Stored readings for primary appliance
         final readings = primaryAppliance != null
