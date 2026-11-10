@@ -375,3 +375,4 @@ class _ChartPainter extends CustomPainter {
         oldDelegate.color != color;
   }
 }
+
