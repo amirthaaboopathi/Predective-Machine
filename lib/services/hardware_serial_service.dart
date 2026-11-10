@@ -479,6 +479,32 @@ class HardwareSerialService extends ChangeNotifier {
     _hardwareRelayState = telemetry.relayOn;
     _latestTelemetry = telemetry;
 
+    // Immediately ingest reading into SensorService so all charts,
+    // analytics, and predictive failure engines update in real-time!
+    final mappingService = HardwareMappingService();
+    String targetId = mappingService.getApplianceIdForPort(_activePort) ?? '';
+    String targetName = 'Smart Appliance';
+
+    if (targetId.isNotEmpty) {
+      final app = ApplianceService().getApplianceById(targetId);
+      if (app != null) targetName = app.name;
+    } else if (ApplianceService().appliances.isNotEmpty) {
+      final firstApp = ApplianceService().appliances.first;
+      targetId = firstApp.id;
+      targetName = firstApp.name;
+    } else {
+      targetId = 'main_appliance';
+    }
+
+    SensorService().addLiveTelemetryReading(
+      applianceId: targetId,
+      applianceName: targetName,
+      temperature: telemetry.temperature,
+      vibration: telemetry.vibrationMagnitude,
+      sound: telemetry.soundDb,
+      recordedAt: telemetry.receivedAt,
+    );
+
     _telemetryStreamController.add(telemetry);
     notifyListeners();
   }

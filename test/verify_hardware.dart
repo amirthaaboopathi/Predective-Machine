@@ -169,5 +169,65 @@ RMS : 45.00
       expect(simulated.relayOn, isTrue);
       expect(simulated.temperature >= 20.0 && simulated.temperature <= 60.0, isTrue);
     });
+
+    test('6. Predictive Failure Analysis calculations', () {
+      final now = DateTime.now();
+
+      // Normal healthy dataset
+      final healthyReadings = [
+        SensorReadingModel(
+          id: 'h1',
+          applianceId: 'app-1',
+          applianceName: 'Test Refrigerator',
+          temperature: 28.0,
+          vibration: 0.16,
+          sound: 42.0,
+          recordedAt: now.subtract(const Duration(minutes: 10)),
+        ),
+        SensorReadingModel(
+          id: 'h2',
+          applianceId: 'app-1',
+          applianceName: 'Test Refrigerator',
+          temperature: 29.0,
+          vibration: 0.18,
+          sound: 44.0,
+          recordedAt: now,
+        ),
+      ];
+
+      final healthyPred = SensorAnalyticsService.computePredictiveFailure(healthyReadings);
+      expect(healthyPred.riskLevel, equals(FailureRiskLevel.low));
+      expect(healthyPred.failureRiskPercent < 25.0, isTrue);
+      expect(healthyPred.estimatedDaysToFailure >= 90, isTrue);
+
+      // High mechanical & thermal stress dataset
+      final stressedReadings = [
+        SensorReadingModel(
+          id: 's1',
+          applianceId: 'app-1',
+          applianceName: 'Test Refrigerator',
+          temperature: 68.0,
+          vibration: 0.75,
+          sound: 78.0,
+          recordedAt: now.subtract(const Duration(minutes: 5)),
+        ),
+        SensorReadingModel(
+          id: 's2',
+          applianceId: 'app-1',
+          applianceName: 'Test Refrigerator',
+          temperature: 72.0,
+          vibration: 0.85,
+          sound: 80.0,
+          recordedAt: now,
+        ),
+      ];
+
+      final stressedPred = SensorAnalyticsService.computePredictiveFailure(stressedReadings);
+      expect(stressedPred.riskLevel == FailureRiskLevel.high || stressedPred.riskLevel == FailureRiskLevel.critical, isTrue);
+      expect(stressedPred.failureRiskPercent >= 60.0, isTrue);
+      expect(stressedPred.estimatedDaysToFailure <= 28, isTrue);
+      expect(stressedPred.preventativeRecommendations.isNotEmpty, isTrue);
+      expect(stressedPred.riskProgressionCurve.length, equals(2));
+    });
   });
 }

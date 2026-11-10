@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app/app.dart';
 import 'utils/constants.dart';
 import 'services/hardware_mapping_service.dart';
+import 'services/sensor_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,6 +14,7 @@ void main() async {
   );
 
   await HardwareMappingService().init();
+  await SensorService().init();
 
   runApp(const MyApplianceApp());
 }

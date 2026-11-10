@@ -272,7 +272,7 @@ class _ChartPainter extends CustomPainter {
 
     // Gradient fill under the curve
     final path = Path();
-    path.moveTo(offsets.first.dx, leftMargin + chartHeight);
+    path.moveTo(offsets.first.dx, topMargin + chartHeight);
     path.lineTo(offsets.first.dx, offsets.first.dy);
 
     for (int i = 0; i < offsets.length - 1; i++) {

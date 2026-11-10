@@ -3,10 +3,13 @@ import '../../models/appliance_model.dart';
 import '../../services/appliance_service.dart';
 import '../../services/sensor_service.dart';
 import '../../services/sensor_analytics_service.dart';
+import '../../services/hardware_serial_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_text_styles.dart';
 import '../../widgets/interactive_chart.dart';
 
+/// Screen presenting comprehensive sensor analytics, real-time plotted trendlines,
+/// statistical metrics, and predictive failure analysis.
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
 
@@ -17,10 +20,11 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   final _sensorService = SensorService();
   final _applianceService = ApplianceService();
+  final _hardwareService = HardwareSerialService();
 
-  AnalyticsTimeRange _selectedRange = AnalyticsTimeRange.oneDay;
+  AnalyticsTimeRange _selectedRange = AnalyticsTimeRange.sixHours;
+  String? _selectedApplianceId;
   DateTimeRange? _customRange;
-  String? _selectedApplianceId; // null = all appliances
 
   @override
   void initState() {
@@ -96,7 +100,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([_sensorService, _applianceService]),
+      listenable: Listenable.merge([_sensorService, _applianceService, _hardwareService]),
       builder: (context, _) {
         final appliances = _applianceService.appliances;
 
@@ -114,11 +118,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
         final summary = SensorAnalyticsService.computeAnalytics(filteredReadings);
         final hasData = filteredReadings.isNotEmpty;
+        final isLive = _hardwareService.isActive;
 
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: const Text('Sensor Analytics & Trends'),
+            title: const Text('Sensor Analytics & Predictions'),
             automaticallyImplyLeading: false,
             actions: [
               IconButton(
@@ -135,6 +140,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Live Stream Status Badge
+                  _buildLiveStatusBanner(isLive, filteredReadings.length),
+                  const SizedBox(height: 14),
+
                   // Appliance Selector Filter (if multiple appliances exist)
                   if (appliances.isNotEmpty) ...[
                     _buildApplianceFilter(appliances),
@@ -148,11 +157,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   if (!hasData) ...[
                     _buildEmptyState(),
                   ] else ...[
-                    // Combined Performance Summary
+                    // Combined Executive Performance Summary
                     _buildExecutiveSummaryCard(summary),
                     const SizedBox(height: 24),
 
-                    // 1. TEMPERATURE ANALYTICS
+                    // PREDICTIVE FAILURE ANALYSIS & RUL FORECAST
+                    _buildPredictiveFailureSection(summary),
+                    const SizedBox(height: 24),
+
+                    // 1. TEMPERATURE ANALYTICS & TREND GRAPH
                     _buildParameterSection(
                       title: 'Appliance Temperature',
                       subtitle: 'Thermal variations and component heating profile',
@@ -167,7 +180,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 2. VIBRATION ANALYTICS
+                    // 2. VIBRATION ANALYTICS & TREND GRAPH
                     _buildParameterSection(
                       title: 'Appliance Vibration',
                       subtitle: 'Dynamic mechanical oscillation and motor stability',
@@ -182,7 +195,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 3. SOUND ANALYTICS
+                    // 3. SOUND ANALYTICS & TREND GRAPH
                     _buildParameterSection(
                       title: 'Operating Sound Level',
                       subtitle: 'Acoustic emissions and background noise levels',
@@ -209,6 +222,57 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ===========================================================================
   // SUB-WIDGETS
   // ===========================================================================
+
+  Widget _buildLiveStatusBanner(bool isLive, int pointCount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: isLive
+            ? const Color(0xFF10B981).withValues(alpha: 0.08)
+            : Colors.grey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isLive
+              ? const Color(0xFF10B981).withValues(alpha: 0.25)
+              : Colors.grey.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isLive ? const Color(0xFF10B981) : Colors.grey,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isLive ? 'Real-Time Hardware Stream Active (COM3)' : 'Viewing Stored Telemetry History',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isLive ? const Color(0xFF047857) : Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          Text(
+            '$pointCount points',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isLive ? const Color(0xFF047857) : AppColors.secondaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildApplianceFilter(List<ApplianceModel> appliances) {
     return Container(
@@ -252,6 +316,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       {'label': '24H', 'value': AnalyticsTimeRange.oneDay},
       {'label': '7D', 'value': AnalyticsTimeRange.sevenDays},
       {'label': '30D', 'value': AnalyticsTimeRange.thirtyDays},
+      {'label': 'All', 'value': AnalyticsTimeRange.allTime},
       {'label': 'Custom', 'value': null},
     ];
 
@@ -375,6 +440,288 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // ===========================================================================
+  // PREDICTIVE FAILURE ANALYSIS CARD & RUL FORECAST
+  // ===========================================================================
+
+  Widget _buildPredictiveFailureSection(ApplianceAnalyticsSummary summary) {
+    final pred = summary.predictiveFailure;
+
+    Color riskColor;
+    String riskLabel;
+    IconData riskIcon;
+
+    switch (pred.riskLevel) {
+      case FailureRiskLevel.low:
+        riskColor = const Color(0xFF10B981);
+        riskLabel = 'Low Risk (Healthy)';
+        riskIcon = Icons.verified_user_rounded;
+        break;
+      case FailureRiskLevel.moderate:
+        riskColor = const Color(0xFFF59E0B);
+        riskLabel = 'Moderate Risk';
+        riskIcon = Icons.warning_amber_rounded;
+        break;
+      case FailureRiskLevel.high:
+        riskColor = const Color(0xFFEA580C);
+        riskLabel = 'High Degradation Risk';
+        riskIcon = Icons.error_outline_rounded;
+        break;
+      case FailureRiskLevel.critical:
+        riskColor = const Color(0xFFEF4444);
+        riskLabel = 'Critical Risk — Failure Imminent';
+        riskIcon = Icons.dangerous_rounded;
+        break;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: riskColor.withValues(alpha: 0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: riskColor.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row: Title and Risk Level Chip
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: riskColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(riskIcon, color: riskColor, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Predictive Failure Analysis',
+                        style: AppTextStyles.heading3.copyWith(fontSize: 16),
+                      ),
+                      Text(
+                        'Remaining Useful Life (RUL) & Health Degradation',
+                        style: AppTextStyles.caption.copyWith(fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: riskColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: riskColor.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  riskLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: riskColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          // Primary Risk Metric Banner
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  riskColor.withValues(alpha: 0.06),
+                  riskColor.withValues(alpha: 0.02),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: riskColor.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Failure Probability Score',
+                      style: TextStyle(fontSize: 12, color: AppColors.secondaryText, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${pred.failureRiskPercent}%',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: riskColor,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(width: 1, height: 40, color: riskColor.withValues(alpha: 0.2)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Est. Days to Maintenance',
+                      style: TextStyle(fontSize: 12, color: AppColors.secondaryText, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${pred.estimatedDaysToFailure} Days',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.darkText,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Component Stress Factor Breakdown
+          Text(
+            'Component Stress Indicators',
+            style: AppTextStyles.heading3.copyWith(fontSize: 13),
+          ),
+          const SizedBox(height: 10),
+          _buildStressBar('Thermal Breakdown Stress', pred.thermalStressScore, const Color(0xFF0284C7)),
+          const SizedBox(height: 8),
+          _buildStressBar('Mechanical Bearing Oscillation', pred.mechanicalStressScore, const Color(0xFF7C3AED)),
+          const SizedBox(height: 8),
+          _buildStressBar('Acoustic Cavitation & Friction', pred.acousticStressScore, const Color(0xFF0D9488)),
+          const SizedBox(height: 16),
+
+          // Primary Factor & Failure Mode Card
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.psychology_outlined, size: 18, color: AppColors.primaryBlue),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Primary Diagnostic Factor: ${pred.primaryRiskFactor}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Mode: ${pred.predictedFailureMode}',
+                  style: AppTextStyles.caption.copyWith(fontSize: 12, color: AppColors.secondaryText),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Failure Probability Trend Chart
+          if (pred.riskProgressionCurve.isNotEmpty) ...[
+            Text(
+              'Failure Probability Progression (% Risk Curve)',
+              style: AppTextStyles.heading3.copyWith(fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            InteractiveSensorChart(
+              points: pred.riskProgressionCurve
+                  .map((p) => ChartDataPoint(timestamp: p.timestamp, value: p.riskPercent))
+                  .toList(),
+              unit: '%',
+              primaryColor: riskColor,
+              thresholdValue: 50.0,
+              thresholdLabel: 'Elevated Risk (50%)',
+              height: 160,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Preventative Action Steps
+          Text(
+            'Recommended Preventative Actions',
+            style: AppTextStyles.heading3.copyWith(fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          ...pred.preventativeRecommendations.map((action) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded, size: 16, color: Color(0xFF10B981)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      action,
+                      style: AppTextStyles.caption.copyWith(fontSize: 12, color: AppColors.darkText),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStressBar(String label, double score, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 11, color: AppColors.secondaryText)),
+            Text('${score.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (score / 100.0).clamp(0.0, 1.0),
+            minHeight: 6,
+            backgroundColor: Colors.grey.withValues(alpha: 0.15),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
     );
   }
 
