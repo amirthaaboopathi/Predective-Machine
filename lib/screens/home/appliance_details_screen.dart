@@ -434,7 +434,7 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
                     // =========================================================
                     Text(
                       isHardwareLive
-                          ? 'Real-Time Hardware Stream ($boundPort)'
+                          ? 'Live Operating Telemetry'
                           : 'Appliance Health & Telemetry',
                       style: AppTextStyles.heading3,
                     ),
@@ -621,12 +621,12 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'No Hardware Device Linked',
+                    'No Monitoring Device Linked',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Assign COM3 to stream real-time MPU6050, DS18B20 & mic telemetry.',
+                    'Link your monitoring device to stream real-time temperature, vibration & sound.',
                     style: AppTextStyles.caption.copyWith(fontSize: 12),
                   ),
                 ],
@@ -641,7 +641,7 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
-              child: const Text('Link COM3', style: TextStyle(fontSize: 12)),
+              child: const Text('Link Device', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -655,23 +655,23 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
     switch (_hardwareService.status) {
       case HardwareConnectionStatus.connected:
         statusColor = const Color(0xFF10B981);
-        statusText = 'Connected to $boundPort (Active)';
+        statusText = 'Connected & Streaming (Active)';
         statusIcon = Icons.check_circle_rounded;
         break;
       case HardwareConnectionStatus.simulated:
         statusColor = const Color(0xFF8B5CF6);
-        statusText = 'Simulated Stream Active ($boundPort)';
+        statusText = 'Simulated Monitor Stream Active';
         statusIcon = Icons.stream_rounded;
         break;
       case HardwareConnectionStatus.connecting:
         statusColor = const Color(0xFFF59E0B);
-        statusText = 'Connecting to $boundPort...';
+        statusText = 'Connecting to Device...';
         statusIcon = Icons.sync_rounded;
         break;
       case HardwareConnectionStatus.error:
       case HardwareConnectionStatus.disconnected:
         statusColor = const Color(0xFFEF4444);
-        statusText = '$boundPort Disconnected (Ready to Connect)';
+        statusText = 'Device Offline (Ready to Connect)';
         statusIcon = Icons.power_off_rounded;
         break;
     }
@@ -702,8 +702,8 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
                 ),
                 Text(
                   isHardwareLive
-                      ? 'Packets: ${_hardwareService.totalPacketsReceived} | 115200 baud'
-                      : 'Plug in hardware to COM3 and tap Connect.',
+                      ? 'Live Telemetry • ${_hardwareService.totalPacketsReceived} readings received'
+                      : 'Ensure device is connected and tap Connect.',
                   style: AppTextStyles.caption.copyWith(fontSize: 11),
                 ),
               ],
@@ -736,46 +736,58 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
   // ===========================================================================
 
   Widget _buildLiveTelemetryGrid(HardwareTelemetryModel telemetry) {
+    final tempStatus = telemetry.temperature > 70
+        ? 'Critical temperature'
+        : (telemetry.temperature > 55 ? 'Elevated temperature' : 'Normal operating temperature');
+
+    final vibStatus = telemetry.vibrationMagnitude > 0.8
+        ? 'High vibration anomaly'
+        : (telemetry.vibrationMagnitude > 0.4 ? 'Moderate mechanical movement' : 'Smooth normal operation');
+
+    final soundStatus = telemetry.soundDb > 75
+        ? 'Excessive acoustic noise'
+        : (telemetry.soundDb > 62 ? 'Elevated operational sound' : 'Quiet ambient operation');
+
     return Column(
       children: [
         // Live Temperature Card (DS18B20 + MPU6050)
         _buildTelemetryMetricCard(
-          title: 'Core Temperature',
+          title: 'Appliance Temperature',
           value: '${telemetry.temperature} °C',
-          sensorName: telemetry.dsConnected ? 'DS18B20 Digital Probe' : 'MPU6050 Onboard',
+          sensorName: telemetry.dsConnected ? 'Digital Thermal Probe' : 'Core Thermal Sensor',
           icon: Icons.thermostat_rounded,
-          accentColor: telemetry.temperature > 65
+          accentColor: telemetry.temperature > 70
               ? const Color(0xFFEF4444)
-              : (telemetry.temperature > 50 ? const Color(0xFFF59E0B) : const Color(0xFF06B6D4)),
-          subtitle: 'Optimal range: 20°C - 55°C',
+              : (telemetry.temperature > 55 ? const Color(0xFFF59E0B) : const Color(0xFF06B6D4)),
+          subtitle: tempStatus,
           indicatorLevel: (telemetry.temperature / 100.0).clamp(0.0, 1.0),
         ),
         const SizedBox(height: 12),
 
         // Live Vibration Card (MPU6050 3-Axis Accel & Gyro)
         _buildTelemetryMetricCard(
-          title: 'Vibration & Mechanical Stability',
+          title: 'Appliance Vibration',
           value: '${telemetry.vibrationMagnitude} G',
-          sensorName: 'MPU6050 6-Axis Motion Sensor',
+          sensorName: 'Triaxial Motion Sensor',
           icon: Icons.vibration_rounded,
-          accentColor: telemetry.vibrationMagnitude > 0.50
+          accentColor: telemetry.vibrationMagnitude > 0.8
               ? const Color(0xFFEF4444)
-              : const Color(0xFF8B5CF6),
-          subtitle: 'Ax: ${telemetry.ax.toStringAsFixed(2)} | Ay: ${telemetry.ay.toStringAsFixed(2)} | Az: ${telemetry.az.toStringAsFixed(2)}',
+              : (telemetry.vibrationMagnitude > 0.4 ? const Color(0xFFF59E0B) : const Color(0xFF8B5CF6)),
+          subtitle: vibStatus,
           indicatorLevel: (telemetry.vibrationMagnitude / 1.5).clamp(0.0, 1.0),
         ),
         const SizedBox(height: 12),
 
         // Live Sound Card (INMP441 Microphone)
         _buildTelemetryMetricCard(
-          title: 'Acoustic Sound Level',
+          title: 'Operating Sound Level',
           value: '${telemetry.soundDb} dB',
-          sensorName: 'INMP441 Digital I2S Microphone',
+          sensorName: 'Acoustic Precision Sensor',
           icon: Icons.graphic_eq_rounded,
-          accentColor: telemetry.soundDb > 70
+          accentColor: telemetry.soundDb > 75
               ? const Color(0xFFEF4444)
-              : const Color(0xFF10B981),
-          subtitle: 'RMS: ${telemetry.micRms.toStringAsFixed(1)} | Peak: ${telemetry.micPeak}',
+              : (telemetry.soundDb > 62 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
+          subtitle: soundStatus,
           indicatorLevel: (telemetry.soundDb / 100.0).clamp(0.0, 1.0),
         ),
       ],
@@ -915,12 +927,12 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hardware Relay (Pin 27)',
+                    'Appliance Power Switch',
                     style: AppTextStyles.heading3.copyWith(fontSize: 15),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    isOn ? 'Status: ACTIVE / ON' : 'Status: STANDBY / OFF',
+                    isOn ? 'Status: Active / Powered On' : 'Status: Standby / Powered Off',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -938,7 +950,7 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
               _hardwareService.setRelay(val);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(val ? 'Hardware Relay switched ON' : 'Hardware Relay switched OFF'),
+                  content: Text(val ? 'Appliance power switched ON' : 'Appliance power switched OFF'),
                   duration: const Duration(seconds: 1),
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1200,7 +1212,7 @@ class _ApplianceDetailsScreenState extends State<ApplianceDetailsScreen> {
           const Divider(height: 20, color: AppColors.dividerColor),
           _buildInfoRow('Model', _currentAppliance.modelNumber ?? 'Not specified'),
           const Divider(height: 20, color: AppColors.dividerColor),
-          _buildInfoRow('Hardware Port', _currentAppliance.isHardwareMonitored ? boundPort : 'None (Unassigned)'),
+          _buildInfoRow('Hardware Link', _currentAppliance.isHardwareMonitored ? 'Active ($boundPort)' : 'Unassigned'),
         ],
       ),
     );
