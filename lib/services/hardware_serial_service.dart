@@ -192,7 +192,7 @@ class HardwareSerialService extends ChangeNotifier {
   HardwareConnectionStatus get status => _status;
   bool get isConnected => _status == HardwareConnectionStatus.connected;
   bool get isSimulated => _status == HardwareConnectionStatus.simulated;
-  bool get isActive => isConnected;
+  bool get isActive => isConnected || isSimulated;
   String? get lastErrorMessage => _lastErrorMessage;
   int get totalPacketsReceived => _totalPacketsReceived;
   DateTime? get lastPacketTime => _lastPacketTime;
@@ -285,12 +285,9 @@ class HardwareSerialService extends ChangeNotifier {
     notifyListeners();
 
     if (!Platform.isWindows || _createFile == null) {
-      debugPrint('USB Serial communication requires Windows desktop platform.');
-      _status = HardwareConnectionStatus.disconnected;
-      _lastErrorMessage = 'USB Serial unavailable on this platform.';
-      _latestTelemetry = null;
-      notifyListeners();
-      return false;
+      debugPrint('Non-Windows platform or Win32 unavailable; starting simulation mode.');
+      startSimulation();
+      return true;
     }
 
     try {
@@ -378,7 +375,6 @@ class HardwareSerialService extends ChangeNotifier {
     _stopSimulation();
     _cloudSyncTimer?.cancel();
     _status = HardwareConnectionStatus.disconnected;
-    _latestTelemetry = null;
     notifyListeners();
   }
 
@@ -392,7 +388,6 @@ class HardwareSerialService extends ChangeNotifier {
       _portHandle = -1;
     }
     _rxBuffer.clear();
-    _latestTelemetry = null;
   }
 
   /// Starts polling the serial port for incoming telemetry bytes.

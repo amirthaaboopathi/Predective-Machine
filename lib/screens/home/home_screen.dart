@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/appliance_model.dart';
+import '../../models/sensor_reading_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/appliance_service.dart';
 import '../../services/analysis_service.dart';
@@ -123,21 +124,31 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        // Strict physical USB connection requirement:
-        // Only display sensor values if ESP32 is physically connected via USB to laptop.
-        final isUsbConnected = _hardwareService.isConnected && _hardwareService.latestTelemetry != null;
-        final liveTelemetry = isUsbConnected ? _hardwareService.latestTelemetry : null;
-        final isHardwareLive = isUsbConnected;
+        // Live stream check - active hardware stream displays immediately
+        final isHardwareActive = _hardwareService.isActive;
+        final liveTelemetry = isHardwareActive ? _hardwareService.latestTelemetry : null;
+        final isHardwareLive = isHardwareActive && liveTelemetry != null;
 
-        // When disconnected from USB, values are strictly null so UI displays '--' and 'ESP32 Disconnected'
-        final double? effectiveTemp = isUsbConnected ? liveTelemetry?.temperature : null;
-        final double? effectiveVib = isUsbConnected ? liveTelemetry?.vibrationMagnitude : null;
-        final double? effectiveSound = isUsbConnected ? liveTelemetry?.soundDb : null;
-        final DateTime? lastUpdateTime = isUsbConnected ? liveTelemetry?.receivedAt : null;
+        // Historical / Stored readings for primary appliance
+        final readings = primaryAppliance != null
+            ? _sensorService.getReadingsForAppliance(primaryAppliance.id, primaryAppliance.name)
+            : <SensorReadingModel>[];
 
-        // Feed to AlertService only if USB is actively connected and streaming data
-        if (primaryAppliance != null && liveTelemetry != null) {
-          _alertService.evaluateLiveTelemetry(primaryAppliance);
+        final latestStored = readings.isNotEmpty ? readings.first : null;
+
+        // Effective telemetry values (live stream takes precedence)
+        final effectiveTemp = liveTelemetry?.temperature ?? latestStored?.temperature;
+        final effectiveVib = liveTelemetry?.vibrationMagnitude ?? latestStored?.vibration;
+        final effectiveSound = liveTelemetry?.soundDb ?? latestStored?.sound;
+        final lastUpdateTime = liveTelemetry?.receivedAt ?? latestStored?.recordedAt;
+
+        // Feed to AlertService
+        if (primaryAppliance != null) {
+          if (liveTelemetry != null) {
+            _alertService.evaluateLiveTelemetry(primaryAppliance);
+          } else if (readings.isNotEmpty) {
+            _alertService.evaluateReadings(primaryAppliance, readings);
+          }
         }
 
         final filteredAppliances = allAppliances.where((appliance) {
@@ -374,10 +385,10 @@ class _HomeScreenState extends State<HomeScreen> {
     String conditionSubtitle = 'All parameters are within verified optimal limits.';
     int activeWarnings = 0;
 
-    if (!isLive || (temp == null && vib == null && sound == null)) {
-      conditionText = 'ESP32 Disconnected';
+    if (temp == null && vib == null && sound == null) {
+      conditionText = 'Device Offline';
       conditionColor = Colors.blueGrey;
-      conditionSubtitle = 'Plug your ESP32 into your laptop USB port to stream live sensor readings.';
+      conditionSubtitle = 'No live or recent telemetry received from the monitoring device.';
     } else {
       if (temp != null && temp > 70) activeWarnings++;
       if (vib != null && vib > 0.80) activeWarnings++;
@@ -473,13 +484,13 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.thermostat_rounded,
           color: const Color(0xFF0284C7),
           status: temp == null
-              ? 'Disconnected'
+              ? 'Unavailable'
               : (temp <= 55 ? 'Normal' : (temp <= 70 ? 'Warning' : 'Critical')),
           statusColor: temp == null
               ? Colors.grey
               : (temp <= 55 ? const Color(0xFF10B981) : (temp <= 70 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444))),
           trendIcon: Icons.trending_flat_rounded,
-          trendLabel: temp == null ? 'No Signal' : 'Stable',
+          trendLabel: 'Stable',
         ),
         const SizedBox(height: 12),
 
@@ -491,13 +502,13 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.vibration_rounded,
           color: const Color(0xFF7C3AED),
           status: vib == null
-              ? 'Disconnected'
+              ? 'Unavailable'
               : (vib <= 0.40 ? 'Normal' : (vib <= 0.80 ? 'Warning' : 'Critical')),
           statusColor: vib == null
               ? Colors.grey
               : (vib <= 0.40 ? const Color(0xFF10B981) : (vib <= 0.80 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444))),
           trendIcon: Icons.trending_flat_rounded,
-          trendLabel: vib == null ? 'No Signal' : 'Smooth',
+          trendLabel: 'Smooth',
         ),
         const SizedBox(height: 12),
 
@@ -509,13 +520,13 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.graphic_eq_rounded,
           color: const Color(0xFF0D9488),
           status: sound == null
-              ? 'Disconnected'
+              ? 'Unavailable'
               : (sound <= 60 ? 'Normal' : (sound <= 75 ? 'Warning' : 'Critical')),
           statusColor: sound == null
               ? Colors.grey
               : (sound <= 60 ? const Color(0xFF10B981) : (sound <= 75 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444))),
           trendIcon: Icons.trending_flat_rounded,
-          trendLabel: sound == null ? 'No Signal' : 'Quiet',
+          trendLabel: 'Quiet',
         ),
       ],
     );
