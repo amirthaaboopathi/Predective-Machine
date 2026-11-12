@@ -6,7 +6,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/app_text_styles.dart';
 
 /// Screen displaying ONLY the individual real-time sensor readings for a selected appliance.
-/// Focuses purely on Temperature, Vibration, and Sound telemetry with verified units and statuses.
+/// Shows readings strictly when the physical ESP32 is connected via USB.
 class SensorStatusScreen extends StatefulWidget {
   final ApplianceModel appliance;
 
@@ -26,6 +26,10 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
   @override
   void initState() {
     super.initState();
+    // Attempt connecting to physical USB port if not already connected
+    if (!_hardwareService.isConnected) {
+      _hardwareService.connect();
+    }
     _sensorService.fetchSensorReadings(widget.appliance.id);
   }
 
@@ -61,21 +65,14 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
     return ListenableBuilder(
       listenable: Listenable.merge([_sensorService, _hardwareService]),
       builder: (context, _) {
-        // Retrieve readings for this appliance
-        final readings = _sensorService.getReadingsForAppliance(
-          widget.appliance.id,
-          widget.appliance.name,
-        );
-        final latestStored = readings.isNotEmpty ? readings.first : null;
+        // Strictly check if ESP32 hardware is physically connected via USB
+        final isUsbConnected = _hardwareService.isConnected && _hardwareService.latestTelemetry != null;
+        final liveTelemetry = isUsbConnected ? _hardwareService.latestTelemetry : null;
 
-        // If hardware is active on this port (or fallback if single device)
-        final liveTelemetry = _hardwareService.isActive ? _hardwareService.latestTelemetry : null;
-
-        // Current sensor values (live stream takes precedence)
-        final temp = liveTelemetry?.temperature ?? latestStored?.temperature ?? 28.0;
-        final vib = liveTelemetry?.vibrationMagnitude ?? latestStored?.vibration ?? 0.16;
-        final sound = liveTelemetry?.soundDb ?? latestStored?.sound ?? 48.0;
-        final lastUpdate = liveTelemetry?.receivedAt ?? latestStored?.recordedAt ?? DateTime.now();
+        final double? temp = liveTelemetry?.temperature;
+        final double? vib = liveTelemetry?.vibrationMagnitude;
+        final double? sound = liveTelemetry?.soundDb;
+        final DateTime? lastUpdate = liveTelemetry?.receivedAt;
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -95,6 +92,10 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                 children: [
                   // Appliance Header Card
                   _buildApplianceHeader(),
+                  const SizedBox(height: 14),
+
+                  // USB Hardware Connection State Banner
+                  _buildUsbConnectionBanner(isUsbConnected),
                   const SizedBox(height: 24),
 
                   // Section Title
@@ -104,7 +105,9 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Live verified parameters for this machine',
+                    isUsbConnected
+                        ? 'Live parameters streaming directly from ESP32 via USB'
+                        : 'Connect your ESP32 to your laptop via USB to view live readings',
                     style: AppTextStyles.caption.copyWith(fontSize: 12),
                   ),
                   const SizedBox(height: 16),
@@ -112,39 +115,48 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                   // 1. TEMPERATURE SENSOR CARD
                   _buildSensorCard(
                     title: 'Appliance Temperature',
-                    value: '${temp.toStringAsFixed(1)} °C',
+                    value: temp != null ? '${temp.toStringAsFixed(1)} °C' : '--',
                     icon: Icons.thermostat_rounded,
                     accentColor: const Color(0xFF0284C7),
-                    status: temp <= 55.0 ? 'Optimal' : (temp <= 70.0 ? 'Elevated' : 'Critical'),
+                    status: temp == null
+                        ? 'Disconnected'
+                        : (temp <= 55.0 ? 'Optimal' : (temp <= 70.0 ? 'Elevated' : 'Critical')),
                     referenceRange: '20.0 °C - 55.0 °C',
                     timestamp: lastUpdate,
-                    progress: (temp / 100.0).clamp(0.0, 1.0),
+                    progress: temp != null ? (temp / 100.0).clamp(0.0, 1.0) : 0.0,
+                    isConnected: isUsbConnected,
                   ),
                   const SizedBox(height: 16),
 
                   // 2. VIBRATION SENSOR CARD
                   _buildSensorCard(
                     title: 'Appliance Vibration',
-                    value: '${vib.toStringAsFixed(2)} G',
+                    value: vib != null ? '${vib.toStringAsFixed(2)} G' : '--',
                     icon: Icons.vibration_rounded,
                     accentColor: const Color(0xFF7C3AED),
-                    status: vib <= 0.40 ? 'Optimal' : (vib <= 0.80 ? 'Elevated' : 'Critical'),
+                    status: vib == null
+                        ? 'Disconnected'
+                        : (vib <= 0.40 ? 'Optimal' : (vib <= 0.80 ? 'Elevated' : 'Critical')),
                     referenceRange: '0.10 G - 0.40 G',
                     timestamp: lastUpdate,
-                    progress: (vib / 1.5).clamp(0.0, 1.0),
+                    progress: vib != null ? (vib / 1.5).clamp(0.0, 1.0) : 0.0,
+                    isConnected: isUsbConnected,
                   ),
                   const SizedBox(height: 16),
 
                   // 3. SOUND SENSOR CARD
                   _buildSensorCard(
                     title: 'Operating Sound Level',
-                    value: '${sound.round()} dB',
+                    value: sound != null ? '${sound.round()} dB' : '--',
                     icon: Icons.graphic_eq_rounded,
                     accentColor: const Color(0xFF0D9488),
-                    status: sound <= 62.0 ? 'Optimal' : (sound <= 75.0 ? 'Elevated' : 'Critical'),
+                    status: sound == null
+                        ? 'Disconnected'
+                        : (sound <= 62.0 ? 'Optimal' : (sound <= 75.0 ? 'Elevated' : 'Critical')),
                     referenceRange: '30 dB - 62 dB',
                     timestamp: lastUpdate,
-                    progress: (sound / 100.0).clamp(0.0, 1.0),
+                    progress: sound != null ? (sound / 100.0).clamp(0.0, 1.0) : 0.0,
+                    isConnected: isUsbConnected,
                   ),
                   const SizedBox(height: 28),
                 ],
@@ -213,6 +225,46 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
     );
   }
 
+  Widget _buildUsbConnectionBanner(bool isUsbConnected) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isUsbConnected
+            ? const Color(0xFF10B981).withValues(alpha: 0.08)
+            : Colors.grey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isUsbConnected
+              ? const Color(0xFF10B981).withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isUsbConnected ? Icons.usb_rounded : Icons.usb_off_rounded,
+            color: isUsbConnected ? const Color(0xFF10B981) : Colors.grey[600],
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isUsbConnected
+                  ? 'ESP32 Connected via USB (${_hardwareService.activePort}) • Live Data Active'
+                  : 'ESP32 Disconnected — Plug device into USB to view live sensor readings',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isUsbConnected ? const Color(0xFF047857) : Colors.grey[700],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSensorCard({
     required String title,
     required String value,
@@ -220,11 +272,14 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
     required Color accentColor,
     required String status,
     required String referenceRange,
-    required DateTime timestamp,
+    required DateTime? timestamp,
     required double progress,
+    required bool isConnected,
   }) {
     Color statusColor;
-    if (status == 'Optimal') {
+    if (!isConnected) {
+      statusColor = Colors.grey;
+    } else if (status == 'Optimal') {
       statusColor = const Color(0xFF10B981);
     } else if (status == 'Elevated') {
       statusColor = const Color(0xFFF59E0B);
@@ -232,16 +287,18 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
       statusColor = const Color(0xFFEF4444);
     }
 
+    final cardAccent = isConnected ? accentColor : Colors.grey;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: accentColor.withValues(alpha: 0.25), width: 1.2),
+        border: Border.all(color: cardAccent.withValues(alpha: 0.25), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: accentColor.withValues(alpha: 0.05),
+            color: cardAccent.withValues(alpha: 0.05),
             blurRadius: 14,
             offset: const Offset(0, 4),
           ),
@@ -259,10 +316,10 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.12),
+                      color: cardAccent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(icon, color: accentColor, size: 22),
+                    child: Icon(icon, color: cardAccent, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Text(
@@ -300,7 +357,7 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: accentColor,
+                  color: cardAccent,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -322,7 +379,7 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
               value: progress,
               minHeight: 8,
               backgroundColor: Colors.grey.withValues(alpha: 0.12),
-              valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+              valueColor: AlwaysStoppedAnimation<Color>(cardAccent),
             ),
           ),
           const SizedBox(height: 12),
@@ -334,7 +391,9 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
               Icon(Icons.access_time_rounded, size: 12, color: Colors.grey[500]),
               const SizedBox(width: 4),
               Text(
-                'Updated at ${_formatTime(timestamp)}',
+                isConnected && timestamp != null
+                    ? 'Updated at ${_formatTime(timestamp)}'
+                    : 'Awaiting USB connection',
                 style: TextStyle(fontSize: 10, color: Colors.grey[500]),
               ),
             ],
