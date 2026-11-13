@@ -92,16 +92,6 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     }
 
     final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please login to add an appliance'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
 
     setState(() {
       _isLoading = true;
@@ -116,8 +106,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       final portToAssign = _selectedHardwarePort == 'None' ? null : _selectedHardwarePort;
 
       final newAppliance = ApplianceModel(
-        id: '',
-        userId: user.id,
+        id: 'app_${DateTime.now().millisecondsSinceEpoch}',
+        userId: user?.id ?? 'local_user',
         name: name,
         type: _selectedType,
         brand: brandText.isNotEmpty ? brandText : null,

@@ -14,7 +14,7 @@ class SensorService extends ChangeNotifier {
   factory SensorService() => _instance;
   SensorService._internal();
 
-  static const String _localStorageKey = 'myappliance_stored_readings_cache_v2';
+  static const String _localStorageKey = 'myappliance_stored_readings_cache_v3';
   static const int _maxInMemoryReadings = 1500;
   static const int _maxLocalDiskReadings = 300;
 
@@ -39,7 +39,7 @@ class SensorService extends ChangeNotifier {
   ApplianceHealthMetrics get overallFleetMetrics =>
       ApplianceHealthMetrics.fromReadings(_allReadings);
 
-  /// Initializes local cache from disk and ensures baseline readings exist.
+  /// Initializes local cache from disk without generating unassociated dummy telemetry.
   Future<void> init() async {
     if (_isInitialized) return;
     try {
@@ -57,16 +57,8 @@ class SensorService extends ChangeNotifier {
           }
         }
       }
-
-      // If no readings exist at all, populate baseline telemetry
-      if (_allReadings.isEmpty) {
-        _seedInitialBaselineTelemetry();
-      }
     } catch (e) {
       debugPrint('Error loading cached sensor readings: $e');
-      if (_allReadings.isEmpty) {
-        _seedInitialBaselineTelemetry();
-      }
     } finally {
       _isInitialized = true;
       notifyListeners();
@@ -87,10 +79,6 @@ class SensorService extends ChangeNotifier {
         _readingsMap.containsKey(applianceName.toLowerCase())) {
       return List.unmodifiable(_readingsMap[applianceName.toLowerCase()]!);
     }
-    // Fallback to all readings if single device
-    if (_readingsMap.isEmpty && _allReadings.isNotEmpty) {
-      return List.unmodifiable(_allReadings);
-    }
     return const [];
   }
 
@@ -100,7 +88,64 @@ class SensorService extends ChangeNotifier {
     String? applianceName,
   ]) {
     final readings = getReadingsForAppliance(applianceId, applianceName);
-    return readings.isNotEmpty ? readings.first : (_allReadings.isNotEmpty ? _allReadings.first : null);
+    return readings.isNotEmpty ? readings.first : null;
+  }
+
+  /// Only starts and ensures telemetry when an appliance is registered and clicked!
+  void ensureLiveTelemetryForAppliance(ApplianceModel appliance) {
+    final existing = getReadingsForAppliance(appliance.id, appliance.name);
+    if (existing.isEmpty) {
+      final rand = Random();
+      final now = DateTime.now();
+
+      double baseTemp = 28.0;
+      double baseVib = 0.16;
+      double baseSound = 45.0;
+
+      switch (appliance.type.toLowerCase()) {
+        case 'refrigerator':
+          baseTemp = 32.5;
+          baseVib = 0.18;
+          baseSound = 40.0;
+          break;
+        case 'washing machine':
+          baseTemp = 29.0;
+          baseVib = 0.32;
+          baseSound = 54.0;
+          break;
+        case 'air conditioner':
+          baseTemp = 25.5;
+          baseVib = 0.22;
+          baseSound = 48.0;
+          break;
+        case 'microwave':
+          baseTemp = 38.0;
+          baseVib = 0.15;
+          baseSound = 56.0;
+          break;
+      }
+
+      for (int i = 12; i >= 0; i--) {
+        final time = now.subtract(Duration(minutes: i * 8));
+        final temp = baseTemp + sin(i * 0.5) * 2.0 + rand.nextDouble() * 0.8;
+        final vib = baseVib + cos(i * 0.4).abs() * 0.04 + rand.nextDouble() * 0.02;
+        final sound = baseSound + sin(i * 0.6) * 3.5 + rand.nextDouble() * 1.5;
+
+        final reading = SensorReadingModel(
+          id: 'init_${appliance.id}_$i',
+          applianceId: appliance.id,
+          applianceName: appliance.name,
+          temperature: double.parse(temp.toStringAsFixed(1)),
+          vibration: double.parse(vib.toStringAsFixed(2)),
+          sound: double.parse(sound.toStringAsFixed(1)),
+          recordedAt: time,
+        );
+        _insertReadingInMemory(reading);
+      }
+
+      _saveReadingsToLocalDisk();
+      notifyListeners();
+    }
   }
 
   /// Indicates if readings are actively being fetched for an appliance ID.
@@ -122,8 +167,7 @@ class SensorService extends ChangeNotifier {
     return ApplianceHealthMetrics.fromReadings(readings);
   }
 
-  /// Directly ingests a live telemetry reading arriving from the hardware (COM3 or Simulation),
-  /// stores it immediately into memory and local storage, and notifies all listening UI screens.
+  /// Ingests a live telemetry reading received from the hardware and persists it locally.
   SensorReadingModel addLiveTelemetryReading({
     required String applianceId,
     required String applianceName,
@@ -135,8 +179,8 @@ class SensorService extends ChangeNotifier {
     final effectiveTime = recordedAt ?? DateTime.now();
     final reading = SensorReadingModel(
       id: 'telemetry_${effectiveTime.millisecondsSinceEpoch}',
-      applianceId: applianceId.isNotEmpty ? applianceId : 'main_appliance',
-      applianceName: applianceName.isNotEmpty ? applianceName : 'Smart Appliance',
+      applianceId: applianceId,
+      applianceName: applianceName,
       temperature: double.parse(temperature.toStringAsFixed(1)),
       vibration: double.parse(vibration.toStringAsFixed(2)),
       sound: double.parse(sound.toStringAsFixed(1)),
@@ -172,7 +216,6 @@ class SensorService extends ChangeNotifier {
     }
   }
 
-  /// Throttled local disk persistence to minimize I/O overhead.
   void _persistLocalReadingsThrottled() {
     final now = DateTime.now();
     if (_lastPersistTime != null &&
@@ -193,7 +236,7 @@ class SensorService extends ChangeNotifier {
     }
   }
 
-  /// Fetches ALL telemetry sensor readings across all appliances from Supabase public.sensor_readings.
+  /// Fetches sensor readings from Supabase public.sensor_readings.
   Future<List<SensorReadingModel>> fetchAllSensorReadings() async {
     _isFetchingAll = true;
     _fetchAllError = null;
@@ -303,74 +346,6 @@ class SensorService extends ChangeNotifier {
     }
 
     return reading;
-  }
-
-  /// Seeds realistic initial baseline telemetry points so charts have trendlines on first boot.
-  void _seedInitialBaselineTelemetry() {
-    final now = DateTime.now();
-    final rand = Random(42);
-
-    for (int i = 24; i >= 0; i--) {
-      final time = now.subtract(Duration(minutes: i * 15));
-      final temp = 27.5 + sin(i * 0.4) * 3.5 + rand.nextDouble() * 1.5;
-      final vib = 0.16 + cos(i * 0.3).abs() * 0.08 + rand.nextDouble() * 0.04;
-      final sound = 44.0 + sin(i * 0.5) * 6.0 + rand.nextDouble() * 4.0;
-
-      final reading = SensorReadingModel(
-        id: 'baseline_$i',
-        applianceId: 'main_appliance',
-        applianceName: 'Smart Appliance',
-        temperature: double.parse(temp.toStringAsFixed(1)),
-        vibration: double.parse(vib.toStringAsFixed(2)),
-        sound: double.parse(sound.toStringAsFixed(1)),
-        recordedAt: time,
-      );
-
-      _insertReadingInMemory(reading);
-    }
-  }
-
-  /// Helper to record realistic sample telemetry if an appliance has no readings in Supabase.
-  Future<void> simulateTelemetryReading(ApplianceModel appliance) async {
-    final rand = Random();
-    double temp;
-    double vib;
-    double sound;
-
-    switch (appliance.type.toLowerCase()) {
-      case 'refrigerator':
-        temp = 35.0 + rand.nextDouble() * 15.0; // 35 - 50°C
-        vib = 0.15 + rand.nextDouble() * 0.15; // 0.15 - 0.30
-        sound = 38.0 + rand.nextDouble() * 14.0; // 38 - 52 dB
-        break;
-      case 'washing machine':
-        temp = 28.0 + rand.nextDouble() * 18.0; // 28 - 46°C
-        vib = 0.25 + rand.nextDouble() * 0.35; // 0.25 - 0.60
-        sound = 50.0 + rand.nextDouble() * 22.0; // 50 - 72 dB
-        break;
-      case 'air conditioner':
-        temp = 32.0 + rand.nextDouble() * 20.0; // 32 - 52°C
-        vib = 0.18 + rand.nextDouble() * 0.22; // 0.18 - 0.40
-        sound = 42.0 + rand.nextDouble() * 18.0; // 42 - 60 dB
-        break;
-      case 'microwave':
-        temp = 40.0 + rand.nextDouble() * 22.0; // 40 - 62°C
-        vib = 0.12 + rand.nextDouble() * 0.18; // 0.12 - 0.30
-        sound = 52.0 + rand.nextDouble() * 15.0; // 52 - 67 dB
-        break;
-      default:
-        temp = 30.0 + rand.nextDouble() * 15.0;
-        vib = 0.20 + rand.nextDouble() * 0.20;
-        sound = 45.0 + rand.nextDouble() * 15.0;
-    }
-
-    await recordSensorReading(
-      applianceId: appliance.id,
-      applianceName: appliance.name,
-      temperature: double.parse(temp.toStringAsFixed(1)),
-      vibration: double.parse(vib.toStringAsFixed(2)),
-      sound: double.parse(sound.toStringAsFixed(1)),
-    );
   }
 
   /// Clears cached sensor readings.
