@@ -239,18 +239,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const Divider(height: 1, color: AppColors.dividerColor),
                     _buildSwitchTile(
                       icon: Icons.cloud_sync_rounded,
-                      title: 'Auto-Sync to Supabase Cloud',
+                      title: 'Auto-Sync to Cloud',
                       value: _hardwareService.autoSyncToCloud,
                       onChanged: (val) {
                         _hardwareService.setAutoSyncToCloud(val);
                       },
-                    ),
-                    const Divider(height: 1, color: AppColors.dividerColor),
-                    _buildSettingTile(
-                      icon: Icons.speed_rounded,
-                      title: 'Total Telemetry Packets',
-                      trailingText: '${_hardwareService.totalPacketsReceived} received',
-                      onTap: () {},
                     ),
                   ]),
                   const SizedBox(height: 20),
@@ -283,37 +276,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _buildSettingCard([
                     _buildSettingTile(
                       icon: Icons.auto_awesome_rounded,
-                      title: 'Appliance AI Assistant (Gemini 3.8)',
+                      title: 'Appliance AI Assistant',
                       onTap: () => Navigator.pushNamed(context, '/chatbot'),
                     ),
                   ]),
                   const SizedBox(height: 20),
 
                   // Support Section
-                  _buildSectionHeader('SUPPORT'),
+                  _buildSectionHeader('ABOUT & SUPPORT'),
                   _buildSettingCard([
-                    _buildSettingTile(
-                      icon: Icons.help_outline_rounded,
-                      title: 'Help & Support',
-                      onTap: () {
-                        showAboutDialog(
-                          context: context,
-                          applicationName: 'MyAppliance Monitor',
-                          applicationVersion: '2.0.0',
-                          applicationLegalese: 'Smart Appliance Monitoring & Predictive Failure System',
-                        );
-                      },
-                    ),
-                    const Divider(height: 1, color: AppColors.dividerColor),
                     _buildSettingTile(
                       icon: Icons.info_outline_rounded,
                       title: 'About Smart Appliance Monitor',
+                      trailingText: 'v2.0.0',
                       onTap: () {
                         showAboutDialog(
                           context: context,
-                          applicationName: 'MyAppliance Monitor',
+                          applicationName: 'Smart Appliance Monitor',
                           applicationVersion: '2.0.0',
-                          applicationLegalese: '© 2026 Smart Appliance Systems Inc.',
+                          applicationLegalese: '© 2026 Smart Appliance Monitoring System',
                         );
                       },
                     ),

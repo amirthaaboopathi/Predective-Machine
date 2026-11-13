@@ -10,11 +10,9 @@ import '../../services/alert_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_text_styles.dart';
 import '../../widgets/appliance_card.dart';
-import '../chat/chatbot_screen.dart';
 
 /// Commercial-grade Home Dashboard for Smart Appliance Monitoring.
-/// Award-winning design providing seamless onboarding when no machines exist,
-/// and instant redirection to individual sensor readings upon appliance selection.
+/// Fast, minimal, professional layout without unnecessary clutter or floating elements.
 class HomeScreen extends StatefulWidget {
   final VoidCallback onNavigateToAddAppliance;
   final ValueChanged<int>? onNavigateToTab;
@@ -30,15 +28,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _searchController = TextEditingController();
   final _hardwareService = HardwareSerialService();
   final _mappingService = HardwareMappingService();
   final _sensorService = SensorService();
   final _applianceService = ApplianceService();
   final _alertService = AlertService();
 
-  String _searchQuery = '';
-  String? _selectedApplianceId;
   bool _isRegisteringPreset = false;
 
   @override
@@ -52,18 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_hardwareService.isActive) {
       _hardwareService.connect('COM3');
     }
-
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.trim().toLowerCase();
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   String _getGreeting() {
@@ -84,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${appliance.name} registered! Tap it to view live sensor readings.'),
+            content: Text('${appliance.name} registered! Tap to view live sensor readings.'),
             backgroundColor: AppColors.primaryBlue,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
@@ -104,26 +87,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _isRegisteringPreset = false);
     }
-  }
-
-  void _openChatbot(BuildContext context, [ApplianceModel? appliance]) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.85,
-            child: ChatbotScreen(initialAppliance: appliance),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -146,121 +109,59 @@ class _HomeScreenState extends State<HomeScreen> {
         final allAppliances = _applianceService.appliances;
         final hasAppliances = allAppliances.isNotEmpty;
 
-        // Active Appliance to display
-        ApplianceModel? primaryAppliance;
-        if (hasAppliances) {
-          primaryAppliance = allAppliances.firstWhere(
-            (a) => a.id == _selectedApplianceId,
-            orElse: () => allAppliances.first,
-          );
-        }
-
-        final filteredAppliances = allAppliances.where((appliance) {
-          if (_searchQuery.isEmpty) return true;
-          return appliance.name.toLowerCase().contains(_searchQuery) ||
-              appliance.type.toLowerCase().contains(_searchQuery) ||
-              (appliance.brand?.toLowerCase().contains(_searchQuery) ?? false);
-        }).toList();
-
         return Scaffold(
           backgroundColor: AppColors.background,
           body: SafeArea(
-            child: Stack(
-              children: [
-                RefreshIndicator(
-                  color: AppColors.primaryBlue,
-                  onRefresh: () async {
-                    await Future.wait([
-                      _applianceService.fetchAppliances(),
-                      _sensorService.fetchAllSensorReadings(),
-                    ]);
-                  },
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 16),
+            child: RefreshIndicator(
+              color: AppColors.primaryBlue,
+              onRefresh: () async {
+                await Future.wait([
+                  _applianceService.fetchAppliances(),
+                  _sensorService.fetchAllSensorReadings(),
+                ]);
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 16),
 
-                        // 1. HEADER ROW: Clean branding, greeting, alerts bell (No "Online" button)
-                        _buildHeader(userName),
-                        const SizedBox(height: 18),
+                    // 1. HEADER ROW: Clean branding, greeting, alerts bell
+                    _buildHeader(userName),
+                    const SizedBox(height: 18),
 
-                        // IF NO APPLIANCES ARE REGISTERED: Show Add Appliance Onboarding Hub
-                        if (!hasAppliances) ...[
-                          _buildOnboardingAddApplianceHero(),
-                          const SizedBox(height: 24),
-                          _buildQuickPresetsSection(),
-                          const SizedBox(height: 24),
-                          _buildSensorFeaturesExplanation(),
-                          const SizedBox(height: 80),
-                        ] else ...[
-                          // IF APPLIANCES EXIST: Show Fleet Dashboard & Machine Click Redirection
-                          _buildFleetOverviewCard(allAppliances.length),
-                          const SizedBox(height: 18),
+                    // IF NO APPLIANCES ARE REGISTERED: Show Onboarding Hub
+                    if (!hasAppliances) ...[
+                      _buildOnboardingAddApplianceHero(),
+                      const SizedBox(height: 24),
+                      _buildQuickPresetsSection(),
+                      const SizedBox(height: 24),
+                      _buildSensorFeaturesExplanation(),
+                      const SizedBox(height: 40),
+                    ] else ...[
+                      // IF APPLIANCES EXIST: Show Fleet Dashboard
+                      _buildFleetOverviewCard(allAppliances.length),
+                      const SizedBox(height: 18),
 
-                          // Power Control Card (Smart Relay Pin 27)
-                          _buildPowerControlCard(),
-                          const SizedBox(height: 20),
+                      // Power Control Card (Smart Relay Pin 27)
+                      _buildPowerControlCard(),
+                      const SizedBox(height: 20),
 
-                          // Quick Navigation Cards (Analytics, Results, Alerts)
-                          _buildQuickNavigationRow(),
-                          const SizedBox(height: 24),
+                      // Quick Navigation Cards (Analytics, Results, Alerts)
+                      _buildQuickNavigationRow(),
+                      const SizedBox(height: 24),
 
-                          // Monitored Appliances Fleet
-                          _buildFleetHeader(),
-                          const SizedBox(height: 12),
-                          _buildAppliancesList(filteredAppliances, analysisService),
-                          const SizedBox(height: 80),
-                        ],
-                      ],
-                    ),
-                  ),
+                      // Monitored Appliances Fleet
+                      _buildFleetHeader(),
+                      const SizedBox(height: 12),
+                      _buildAppliancesList(allAppliances, analysisService),
+                      const SizedBox(height: 40),
+                    ],
+                  ],
                 ),
-
-                // Floating AI Assistant Button
-                Positioned(
-                  right: 20,
-                  bottom: 16,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF246BFD), Color(0xFF6366F1)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF246BFD).withValues(alpha: 0.35),
-                          blurRadius: 14,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: FloatingActionButton.extended(
-                      heroTag: 'home_chatbot_fab',
-                      elevation: 0,
-                      backgroundColor: Colors.transparent,
-                      onPressed: () => _openChatbot(context, primaryAppliance),
-                      icon: const Icon(
-                        Icons.auto_awesome_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        'AI Assistant',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -279,16 +180,16 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         // App Icon Avatar
         Container(
-          width: 46,
-          height: 46,
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
             color: AppColors.primaryBlueLight,
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: const Icon(
             Icons.shield_outlined,
             color: AppColors.primaryBlue,
-            size: 26,
+            size: 24,
           ),
         ),
         const SizedBox(width: 12),
@@ -353,56 +254,45 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildOnboardingAddApplianceHero() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.2),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF246BFD).withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF246BFD).withValues(alpha: 0.5)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.sensors_rounded, size: 12, color: Color(0xFF60A5FA)),
-                    SizedBox(width: 4),
-                    Text(
-                      'IOT TELEMETRY READY',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF93C5FD),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF246BFD).withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF246BFD).withValues(alpha: 0.5)),
+            ),
+            child: const Text(
+              'SMART IOT MONITORING',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF93C5FD),
+                letterSpacing: 0.5,
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           const Text(
-            'Register Your First Appliance',
+            'Register Your Appliance',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -410,33 +300,27 @@ class _HomeScreenState extends State<HomeScreen> {
               letterSpacing: -0.3,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            'Add your home appliance to start capturing live temperature, vibration, and sound telemetry from your ESP32 device.',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[300],
-              height: 1.4,
-            ),
+            'Connect your physical appliance to monitor real-time temperature, vibration, and sound telemetry.',
+            style: TextStyle(fontSize: 13, color: Colors.grey[300], height: 1.4),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: 46,
             child: ElevatedButton.icon(
               onPressed: widget.onNavigateToAddAppliance,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryBlue,
                 foregroundColor: Colors.white,
                 elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
               label: const Text(
                 'Register New Appliance',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -468,9 +352,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
-          'Tap any preset to instantly register and begin monitoring:',
+          'Tap any preset to instantly register and begin telemetry:',
           style: AppTextStyles.caption.copyWith(fontSize: 12),
         ),
         const SizedBox(height: 12),
@@ -481,7 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.45,
+            childAspectRatio: 1.5,
           ),
           itemCount: presets.length,
           itemBuilder: (context, index) {
@@ -500,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.shadowColor,
-                      blurRadius: 10,
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
@@ -513,12 +397,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(7),
                           decoration: BoxDecoration(
                             color: AppColors.primaryBlueLight,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(p['icon'] as IconData, color: AppColors.primaryBlue, size: 20),
+                          child: Icon(p['icon'] as IconData, color: AppColors.primaryBlue, size: 18),
                         ),
                         const Icon(Icons.add_rounded, size: 18, color: AppColors.primaryBlue),
                       ],
@@ -552,27 +436,27 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Monitored Sensor Parameters', style: AppTextStyles.heading3),
-        const SizedBox(height: 12),
+        Text('Monitored Parameters', style: AppTextStyles.heading3),
+        const SizedBox(height: 10),
         _buildFeatureItem(
           icon: Icons.thermostat_rounded,
           color: const Color(0xFF0284C7),
           title: 'Temperature Telemetry',
-          description: 'Tracks DS18B20 & MPU6050 thermal drift and compressor overheating in real time.',
+          description: 'Tracks continuous thermal conditions and overheating in °C.',
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _buildFeatureItem(
           icon: Icons.vibration_rounded,
           color: const Color(0xFF7C3AED),
-          title: '3-Axis Vibration Analysis',
-          description: 'Detects bearing chatter, motor imbalance, and mechanical rotor oscillation in G-force.',
+          title: 'Vibration Analysis',
+          description: 'Detects mechanical rotor movement, balance, and oscillation in G.',
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _buildFeatureItem(
           icon: Icons.graphic_eq_rounded,
           color: const Color(0xFF0D9488),
-          title: 'Acoustic Sound Monitoring',
-          description: 'Analyzes high-frequency harmonic spikes and noise levels in decibels via INMP441.',
+          title: 'Acoustic Sound Level',
+          description: 'Monitors operating noise levels and acoustic resonance in dB.',
         ),
       ],
     );
@@ -585,22 +469,21 @@ class _HomeScreenState extends State<HomeScreen> {
     required String description,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.borderColor),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -608,10 +491,9 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 2),
                 Text(
                   description,
-                  style: const TextStyle(fontSize: 11, color: AppColors.secondaryText, height: 1.3),
+                  style: const TextStyle(fontSize: 11, color: AppColors.secondaryText),
                 ),
               ],
             ),
@@ -650,7 +532,7 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Fleet Monitoring Status',
+                'Operating Condition',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.secondaryText),
               ),
               Container(
@@ -660,7 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'All Systems Operational',
+                  'Operating Normally',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857)),
                 ),
               ),
@@ -671,10 +553,10 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildFleetStat('$totalAppliances', 'Machines Active', AppColors.primaryBlue),
-              Container(width: 1, height: 32, color: AppColors.borderColor),
+              Container(width: 1, height: 30, color: AppColors.borderColor),
               _buildFleetStat('$alertCount', 'Active Alerts', alertCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
-              Container(width: 1, height: 32, color: AppColors.borderColor),
-              _buildFleetStat('COM3', 'Telemetry Link', const Color(0xFF7C3AED)),
+              Container(width: 1, height: 30, color: AppColors.borderColor),
+              _buildFleetStat('Active', 'Telemetry Stream', const Color(0xFF10B981)),
             ],
           ),
         ],
@@ -687,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           value,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: color),
         ),
         const SizedBox(height: 2),
         Text(label, style: const TextStyle(fontSize: 10, color: AppColors.secondaryText)),
@@ -700,10 +582,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.borderColor),
       ),
       child: Row(
@@ -712,7 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: relayOn
                       ? const Color(0xFF10B981).withValues(alpha: 0.15)
@@ -722,7 +604,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Icon(
                   Icons.power_settings_new_rounded,
                   color: relayOn ? const Color(0xFF10B981) : Colors.grey[600],
-                  size: 20,
+                  size: 18,
                 ),
               ),
               const SizedBox(width: 12),
@@ -731,10 +613,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     'Appliance Power Control',
-                    style: AppTextStyles.heading3.copyWith(fontSize: 14),
+                    style: AppTextStyles.heading3.copyWith(fontSize: 13),
                   ),
                   Text(
-                    relayOn ? 'Power active • Relay Pin 27 energized' : 'Standby • Power disconnected',
+                    relayOn ? 'Power active • Machine energized' : 'Standby • Power off',
                     style: AppTextStyles.caption.copyWith(fontSize: 11),
                   ),
                 ],
@@ -811,16 +693,16 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 6),
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 5),
             Text(
               title,
               style: TextStyle(
