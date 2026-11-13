@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../models/appliance_model.dart';
-import '../../models/sensor_reading_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/appliance_service.dart';
 import '../../services/analysis_service.dart';
@@ -11,12 +10,11 @@ import '../../services/alert_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_text_styles.dart';
 import '../../widgets/appliance_card.dart';
-import '../../widgets/empty_state.dart';
 import '../chat/chatbot_screen.dart';
 
 /// Commercial-grade Home Dashboard for Smart Appliance Monitoring.
-/// Displays real-time temperature, vibration, and sound telemetry, overall operating condition,
-/// and instant navigation to analytics, results, and alerts.
+/// Award-winning design providing seamless onboarding when no machines exist,
+/// and instant redirection to individual sensor readings upon appliance selection.
 class HomeScreen extends StatefulWidget {
   final VoidCallback onNavigateToAddAppliance;
   final ValueChanged<int>? onNavigateToTab;
@@ -41,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _searchQuery = '';
   String? _selectedApplianceId;
+  bool _isRegisteringPreset = false;
 
   @override
   void initState() {
@@ -74,6 +73,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good Evening';
   }
 
+  Future<void> _handleQuickPreset(String name, String type, String brand) async {
+    setState(() => _isRegisteringPreset = true);
+    try {
+      final appliance = await _applianceService.registerPreset(
+        name: name,
+        type: type,
+        brand: brand,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${appliance.name} registered! Tap it to view live sensor readings.'),
+            backgroundColor: AppColors.primaryBlue,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to register: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRegisteringPreset = false);
+    }
+  }
+
   void _openChatbot(BuildContext context, [ApplianceModel? appliance]) {
     showModalBottomSheet(
       context: context,
@@ -94,8 +126,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final authService = AuthService();
@@ -114,41 +144,15 @@ class _HomeScreenState extends State<HomeScreen> {
       ]),
       builder: (context, _) {
         final allAppliances = _applianceService.appliances;
+        final hasAppliances = allAppliances.isNotEmpty;
 
         // Active Appliance to display
         ApplianceModel? primaryAppliance;
-        if (allAppliances.isNotEmpty) {
+        if (hasAppliances) {
           primaryAppliance = allAppliances.firstWhere(
             (a) => a.id == _selectedApplianceId,
             orElse: () => allAppliances.first,
           );
-        }
-
-        // Live stream check - active hardware stream displays immediately
-        final isHardwareActive = _hardwareService.isActive;
-        final liveTelemetry = isHardwareActive ? _hardwareService.latestTelemetry : null;
-        final isHardwareLive = isHardwareActive && liveTelemetry != null;
-
-        // Historical / Stored readings for primary appliance
-        final readings = primaryAppliance != null
-            ? _sensorService.getReadingsForAppliance(primaryAppliance.id, primaryAppliance.name)
-            : <SensorReadingModel>[];
-
-        final latestStored = readings.isNotEmpty ? readings.first : null;
-
-        // Effective telemetry values (live stream takes precedence)
-        final effectiveTemp = liveTelemetry?.temperature ?? latestStored?.temperature;
-        final effectiveVib = liveTelemetry?.vibrationMagnitude ?? latestStored?.vibration;
-        final effectiveSound = liveTelemetry?.soundDb ?? latestStored?.sound;
-        final lastUpdateTime = liveTelemetry?.receivedAt ?? latestStored?.recordedAt;
-
-        // Feed to AlertService
-        if (primaryAppliance != null) {
-          if (liveTelemetry != null) {
-            _alertService.evaluateLiveTelemetry(primaryAppliance);
-          } else if (readings.isNotEmpty) {
-            _alertService.evaluateReadings(primaryAppliance, readings);
-          }
         }
 
         final filteredAppliances = allAppliances.where((appliance) {
@@ -179,51 +183,37 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         const SizedBox(height: 16),
 
-                        // 1. HEADER ROW: Branding, Greeting, Device chip, Alerts
-                        _buildHeader(userName, isHardwareLive, primaryAppliance),
-                        const SizedBox(height: 16),
+                        // 1. HEADER ROW: Clean branding, greeting, alerts bell (No "Online" button)
+                        _buildHeader(userName),
+                        const SizedBox(height: 18),
 
-                        // 2. APPLIANCE SELECTOR (if multiple appliances exist)
-                        if (allAppliances.length > 1) ...[
-                          _buildApplianceSelector(allAppliances, primaryAppliance?.id),
-                          const SizedBox(height: 16),
+                        // IF NO APPLIANCES ARE REGISTERED: Show Add Appliance Onboarding Hub
+                        if (!hasAppliances) ...[
+                          _buildOnboardingAddApplianceHero(),
+                          const SizedBox(height: 24),
+                          _buildQuickPresetsSection(),
+                          const SizedBox(height: 24),
+                          _buildSensorFeaturesExplanation(),
+                          const SizedBox(height: 80),
+                        ] else ...[
+                          // IF APPLIANCES EXIST: Show Fleet Dashboard & Machine Click Redirection
+                          _buildFleetOverviewCard(allAppliances.length),
+                          const SizedBox(height: 18),
+
+                          // Power Control Card (Smart Relay Pin 27)
+                          _buildPowerControlCard(),
+                          const SizedBox(height: 20),
+
+                          // Quick Navigation Cards (Analytics, Results, Alerts)
+                          _buildQuickNavigationRow(),
+                          const SizedBox(height: 24),
+
+                          // Monitored Appliances Fleet
+                          _buildFleetHeader(),
+                          const SizedBox(height: 12),
+                          _buildAppliancesList(filteredAppliances, analysisService),
+                          const SizedBox(height: 80),
                         ],
-
-                        // 3. OVERALL APPLIANCE OPERATING CONDITION CARD
-                        _buildOverallConditionCard(
-                          primaryAppliance,
-                          effectiveTemp,
-                          effectiveVib,
-                          effectiveSound,
-                          isHardwareLive,
-                          lastUpdateTime,
-                        ),
-                        const SizedBox(height: 20),
-
-                        // 4. THREE PREMIUM SENSOR MONITORING CARDS
-                        Text('Real-Time Parameters', style: AppTextStyles.heading3),
-                        const SizedBox(height: 12),
-                        _buildSensorCards(
-                          effectiveTemp,
-                          effectiveVib,
-                          effectiveSound,
-                          lastUpdateTime,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // 5. APPLIANCE POWER CONTROL (SMART RELAY)
-                        _buildPowerControlCard(isHardwareLive),
-                        const SizedBox(height: 20),
-
-                        // 6. QUICK NAVIGATION CARDS (Analytics, Results, Alerts)
-                        _buildQuickNavigationRow(),
-                        const SizedBox(height: 24),
-
-                        // 7. REGISTERED APPLIANCES FLEET
-                        _buildFleetHeader(),
-                        const SizedBox(height: 12),
-                        _buildAppliancesList(filteredAppliances, analysisService),
-                        const SizedBox(height: 80),
                       ],
                     ),
                   ),
@@ -282,21 +272,23 @@ class _HomeScreenState extends State<HomeScreen> {
   // SUB-WIDGET BUILDERS
   // ===========================================================================
 
-  Widget _buildHeader(String userName, bool isHardwareLive, ApplianceModel? primaryAppliance) {
+  Widget _buildHeader(String userName) {
+    final unreadAlerts = _alertService.unreadWarningCount;
+
     return Row(
       children: [
         // App Icon Avatar
         Container(
-          width: 44,
-          height: 44,
+          width: 46,
+          height: 46,
           decoration: BoxDecoration(
             color: AppColors.primaryBlueLight,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(15),
           ),
           child: const Icon(
             Icons.shield_outlined,
             color: AppColors.primaryBlue,
-            size: 24,
+            size: 26,
           ),
         ),
         const SizedBox(width: 12),
@@ -324,98 +316,329 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        // Notifications / Alerts icon
-        IconButton(
-          icon: const Icon(Icons.notifications_none_rounded, color: AppColors.darkText),
-          onPressed: () {
-            if (widget.onNavigateToTab != null) {
-              widget.onNavigateToTab!(3); // Alerts Tab
-            }
+        // Notifications / Alerts icon with badge
+        Stack(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_none_rounded, color: AppColors.darkText),
+              onPressed: () {
+                if (widget.onNavigateToTab != null) {
+                  widget.onNavigateToTab!(3); // Alerts Tab
+                }
+              },
+            ),
+            if (unreadAlerts > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  width: 9,
+                  height: 9,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFEF4444),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // ONBOARDING: ADD APPLIANCE HERO (WHEN NO APPLIANCES REGISTERED)
+  // ===========================================================================
+
+  Widget _buildOnboardingAddApplianceHero() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF246BFD).withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF246BFD).withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.sensors_rounded, size: 12, color: Color(0xFF60A5FA)),
+                    SizedBox(width: 4),
+                    Text(
+                      'IOT TELEMETRY READY',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF93C5FD),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Register Your First Appliance',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add your home appliance to start capturing live temperature, vibration, and sound telemetry from your ESP32 device.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[300],
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: widget.onNavigateToAddAppliance,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+              label: const Text(
+                'Register New Appliance',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickPresetsSection() {
+    final presets = [
+      {'name': 'LG Inverter Refrigerator', 'type': 'Refrigerator', 'brand': 'LG', 'icon': Icons.kitchen_rounded},
+      {'name': 'Samsung Front-Load Washer', 'type': 'Washing Machine', 'brand': 'Samsung', 'icon': Icons.local_laundry_service_rounded},
+      {'name': 'Daikin Split Air Conditioner', 'type': 'Air Conditioner', 'brand': 'Daikin', 'icon': Icons.ac_unit_rounded},
+      {'name': 'Panasonic Inverter Microwave', 'type': 'Microwave', 'brand': 'Panasonic', 'icon': Icons.microwave_rounded},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Quick Start Presets', style: AppTextStyles.heading3),
+            if (_isRegisteringPreset)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryBlue),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Tap any preset to instantly register and begin monitoring:',
+          style: AppTextStyles.caption.copyWith(fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.45,
+          ),
+          itemCount: presets.length,
+          itemBuilder: (context, index) {
+            final p = presets[index];
+            return InkWell(
+              onTap: _isRegisteringPreset
+                  ? null
+                  : () => _handleQuickPreset(p['name'] as String, p['type'] as String, p['brand'] as String),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.borderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.shadowColor,
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryBlueLight,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(p['icon'] as IconData, color: AppColors.primaryBlue, size: 20),
+                        ),
+                        const Icon(Icons.add_rounded, size: 18, color: AppColors.primaryBlue),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p['name'] as String,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${p['brand']} • ${p['type']}',
+                          style: const TextStyle(fontSize: 10, color: AppColors.secondaryText),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
           },
         ),
       ],
     );
   }
 
-  Widget _buildApplianceSelector(List<ApplianceModel> appliances, String? currentId) {
+  Widget _buildSensorFeaturesExplanation() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Monitored Sensor Parameters', style: AppTextStyles.heading3),
+        const SizedBox(height: 12),
+        _buildFeatureItem(
+          icon: Icons.thermostat_rounded,
+          color: const Color(0xFF0284C7),
+          title: 'Temperature Telemetry',
+          description: 'Tracks DS18B20 & MPU6050 thermal drift and compressor overheating in real time.',
+        ),
+        const SizedBox(height: 10),
+        _buildFeatureItem(
+          icon: Icons.vibration_rounded,
+          color: const Color(0xFF7C3AED),
+          title: '3-Axis Vibration Analysis',
+          description: 'Detects bearing chatter, motor imbalance, and mechanical rotor oscillation in G-force.',
+        ),
+        const SizedBox(height: 10),
+        _buildFeatureItem(
+          icon: Icons.graphic_eq_rounded,
+          color: const Color(0xFF0D9488),
+          title: 'Acoustic Sound Monitoring',
+          description: 'Analyzes high-frequency harmonic spikes and noise levels in decibels via INMP441.',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeatureItem({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String description,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.borderColor),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: currentId,
-          isExpanded: true,
-          items: appliances.map((a) {
-            return DropdownMenuItem(
-              value: a.id,
-              child: Row(
-                children: [
-                  const Icon(Icons.devices_rounded, size: 18, color: AppColors.primaryBlue),
-                  const SizedBox(width: 10),
-                  Text(
-                    '${a.name} (${a.type})',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-          onChanged: (val) {
-            if (val != null) setState(() => _selectedApplianceId = val);
-          },
-        ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: const TextStyle(fontSize: 11, color: AppColors.secondaryText, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildOverallConditionCard(
-    ApplianceModel? appliance,
-    double? temp,
-    double? vib,
-    double? sound,
-    bool isLive,
-    DateTime? lastUpdate,
-  ) {
-    String conditionText = 'Operating Normally';
-    Color conditionColor = const Color(0xFF10B981);
-    String conditionSubtitle = 'All parameters are within verified optimal limits.';
-    int activeWarnings = 0;
+  // ===========================================================================
+  // FLEET MONITORING (WHEN APPLIANCES EXIST)
+  // ===========================================================================
 
-    if (temp == null && vib == null && sound == null) {
-      conditionText = 'Device Offline';
-      conditionColor = Colors.blueGrey;
-      conditionSubtitle = 'No live or recent telemetry received from the monitoring device.';
-    } else {
-      if (temp != null && temp > 70) activeWarnings++;
-      if (vib != null && vib > 0.80) activeWarnings++;
-      if (sound != null && sound > 75) activeWarnings++;
-
-      if (activeWarnings > 0) {
-        conditionText = 'Abnormal Condition Detected';
-        conditionColor = const Color(0xFFEF4444);
-        conditionSubtitle = '$activeWarnings parameter(s) exceed safe operating limits.';
-      } else if ((temp != null && temp > 55) || (vib != null && vib > 0.40) || (sound != null && sound > 62)) {
-        conditionText = 'Attention Required';
-        conditionColor = const Color(0xFFF59E0B);
-        conditionSubtitle = 'Elevated operating telemetry detected. Inspection recommended.';
-      }
-    }
+  Widget _buildFleetOverviewCard(int totalAppliances) {
+    final alertCount = _alertService.allAlerts.length;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: conditionColor.withValues(alpha: 0.3), width: 1.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderColor),
         boxShadow: [
           BoxShadow(
-            color: conditionColor.withValues(alpha: 0.08),
-            blurRadius: 18,
+            color: AppColors.shadowColor,
+            blurRadius: 14,
             offset: const Offset(0, 4),
           ),
         ],
@@ -426,214 +649,53 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                appliance != null ? appliance.name : 'Selected Appliance',
-                style: AppTextStyles.caption.copyWith(color: AppColors.secondaryText),
+              const Text(
+                'Fleet Monitoring Status',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.secondaryText),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: conditionColor.withValues(alpha: 0.12),
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  conditionText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: conditionColor,
-                  ),
+                child: const Text(
+                  'All Systems Operational',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857)),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            conditionText,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: conditionColor,
-            ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildFleetStat('$totalAppliances', 'Machines Active', AppColors.primaryBlue),
+              Container(width: 1, height: 32, color: AppColors.borderColor),
+              _buildFleetStat('$alertCount', 'Active Alerts', alertCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
+              Container(width: 1, height: 32, color: AppColors.borderColor),
+              _buildFleetStat('COM3', 'Telemetry Link', const Color(0xFF7C3AED)),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            conditionSubtitle,
-            style: AppTextStyles.bodyMedium,
-          ),
-          if (lastUpdate != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Updated ${_formatTimeAgo(lastUpdate)}',
-              style: AppTextStyles.caption.copyWith(fontSize: 11),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _buildSensorCards(double? temp, double? vib, double? sound, DateTime? timestamp) {
+  Widget _buildFleetStat(String value, String label, Color color) {
     return Column(
       children: [
-        // 1. TEMPERATURE CARD
-        _buildMetricCard(
-          label: 'Appliance Temperature',
-          value: temp != null ? '$temp' : '--',
-          unit: '°C',
-          icon: Icons.thermostat_rounded,
-          color: const Color(0xFF0284C7),
-          status: temp == null
-              ? 'Unavailable'
-              : (temp <= 55 ? 'Normal' : (temp <= 70 ? 'Warning' : 'Critical')),
-          statusColor: temp == null
-              ? Colors.grey
-              : (temp <= 55 ? const Color(0xFF10B981) : (temp <= 70 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444))),
-          trendIcon: Icons.trending_flat_rounded,
-          trendLabel: 'Stable',
+        Text(
+          value,
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
         ),
-        const SizedBox(height: 12),
-
-        // 2. VIBRATION CARD
-        _buildMetricCard(
-          label: 'Appliance Vibration',
-          value: vib != null ? '$vib' : '--',
-          unit: 'G',
-          icon: Icons.vibration_rounded,
-          color: const Color(0xFF7C3AED),
-          status: vib == null
-              ? 'Unavailable'
-              : (vib <= 0.40 ? 'Normal' : (vib <= 0.80 ? 'Warning' : 'Critical')),
-          statusColor: vib == null
-              ? Colors.grey
-              : (vib <= 0.40 ? const Color(0xFF10B981) : (vib <= 0.80 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444))),
-          trendIcon: Icons.trending_flat_rounded,
-          trendLabel: 'Smooth',
-        ),
-        const SizedBox(height: 12),
-
-        // 3. SOUND CARD
-        _buildMetricCard(
-          label: 'Operating Sound Level',
-          value: sound != null ? '${sound.round()}' : '--',
-          unit: 'dB',
-          icon: Icons.graphic_eq_rounded,
-          color: const Color(0xFF0D9488),
-          status: sound == null
-              ? 'Unavailable'
-              : (sound <= 60 ? 'Normal' : (sound <= 75 ? 'Warning' : 'Critical')),
-          statusColor: sound == null
-              ? Colors.grey
-              : (sound <= 60 ? const Color(0xFF10B981) : (sound <= 75 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444))),
-          trendIcon: Icons.trending_flat_rounded,
-          trendLabel: 'Quiet',
-        ),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.secondaryText)),
       ],
     );
   }
 
-  Widget _buildMetricCard({
-    required String label,
-    required String value,
-    required String unit,
-    required IconData icon,
-    required Color color,
-    required String status,
-    required Color statusColor,
-    required IconData trendIcon,
-    required String trendLabel,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor,
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: AppTextStyles.heading3.copyWith(fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          status,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: statusColor,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        trendLabel,
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                unit,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPowerControlCard(bool isLive) {
+  Widget _buildPowerControlCard() {
     final relayOn = _hardwareService.relayState;
 
     return Container(
@@ -672,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: AppTextStyles.heading3.copyWith(fontSize: 14),
                   ),
                   Text(
-                    relayOn ? 'Power active • Relay energized' : 'Standby • Power off',
+                    relayOn ? 'Power active • Relay Pin 27 energized' : 'Standby • Power disconnected',
                     style: AppTextStyles.caption.copyWith(fontSize: 11),
                   ),
                 ],
@@ -795,16 +857,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAppliancesList(List<ApplianceModel> appliances, AnalysisService analysisService) {
-    if (appliances.isEmpty) {
-      return EmptyStateWidget(
-        icon: Icons.kitchen_outlined,
-        title: 'No appliances registered yet',
-        subtitle: 'Add your home appliances to begin continuous telemetry monitoring.',
-        buttonText: 'Add Appliance',
-        onButtonPressed: widget.onNavigateToAddAppliance,
-      );
-    }
-
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -821,6 +873,7 @@ class _HomeScreenState extends State<HomeScreen> {
           healthMetrics: healthMetrics,
           latestReading: latestReading,
           onTap: () {
+            // Clicking machine redirects directly to the Sensor Status Page alone!
             Navigator.pushNamed(
               context,
               '/sensor-status',
@@ -830,14 +883,5 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
-  }
-
-  String _formatTimeAgo(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inSeconds < 60) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }

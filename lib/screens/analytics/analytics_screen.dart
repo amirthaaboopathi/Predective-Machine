@@ -155,7 +155,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   const SizedBox(height: 20),
 
                   if (!hasData) ...[
-                    _buildEmptyState(),
+                    _buildEmptyState(appliances.isEmpty),
                   ] else ...[
                     // Combined Executive Performance Summary
                     _buildExecutiveSummaryCard(summary),
@@ -841,7 +841,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Container(width: 1, height: 24, color: AppColors.borderColor);
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool noAppliances) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -859,24 +859,41 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               color: Color(0xFFEFF6FF),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.analytics_outlined,
+            child: Icon(
+              noAppliances ? Icons.kitchen_outlined : Icons.analytics_outlined,
               size: 40,
               color: AppColors.primaryBlue,
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            'No Telemetry Recorded For This Timeframe',
+            noAppliances
+                ? 'No Appliances Registered Yet'
+                : 'No Telemetry Recorded For This Timeframe',
             style: AppTextStyles.heading3.copyWith(fontSize: 16),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
-            'Connect your monitoring device or adjust the timeframe filter to view historical trends.',
+            noAppliances
+                ? 'Register an appliance on the home screen to begin continuous sensor analytics and predictive failure tracking.'
+                : 'Connect your monitoring device or adjust the timeframe filter to view historical trends.',
             style: AppTextStyles.subtitle,
             textAlign: TextAlign.center,
           ),
+          if (noAppliances) ...[
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/add-appliance'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+              label: const Text('Add Appliance'),
+            ),
+          ],
         ],
       ),
     );

@@ -236,94 +236,60 @@ class ApplianceCard extends StatelessWidget {
                   ],
                 ),
 
-                // Live Stream Indicator Bar when active
-                if (isActivelyStreaming && hardwareService.latestTelemetry != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF10B981).withValues(alpha: 0.08),
-                          const Color(0xFF2563EB).withValues(alpha: 0.08),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF10B981),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Text(
-                              'LIVE TELEMETRY',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF047857),
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            Text(
-                              '${hardwareService.latestTelemetry!.temperature}°C',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF047857),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Vib: ${hardwareService.latestTelemetry!.vibrationMagnitude}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1D4ED8),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: hardwareService.relayState
-                                    ? Colors.green.withValues(alpha: 0.2)
-                                    : Colors.grey.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                hardwareService.relayState ? 'RELAY ON' : 'RELAY OFF',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: hardwareService.relayState
-                                      ? Colors.green[800]
-                                      : Colors.grey[700],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                // Prompt to view individual sensor readings
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlueLight,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.primaryBlue.withValues(alpha: 0.15),
+                      width: 1,
                     ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.sensors_rounded,
+                            size: 15,
+                            color: AppColors.primaryBlue,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Live Sensor Telemetry',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryBlue,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            'View Readings',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryBlue,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 14,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
 
                 // Stored Sensor Metrics Row: Temperature, Vibration, Sound
                 if (hasTelemetry) ...[

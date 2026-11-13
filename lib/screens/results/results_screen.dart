@@ -596,9 +596,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
   }
 
   Widget _buildNoDataCard(ApplianceModel appliance) {
+    final hasNoAppliance = appliance.id.isEmpty;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -607,18 +609,44 @@ class _ResultsScreenState extends State<ResultsScreen> {
       ),
       child: Column(
         children: [
-          const Icon(Icons.assignment_late_outlined, size: 40, color: Colors.blueGrey),
-          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF1F5F9),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              hasNoAppliance ? Icons.kitchen_outlined : Icons.assignment_late_outlined,
+              size: 38,
+              color: AppColors.primaryBlue,
+            ),
+          ),
+          const SizedBox(height: 16),
           Text(
-            'No Monitoring Assessment Available',
+            hasNoAppliance ? 'No Appliances Registered' : 'No Monitoring Assessment Available',
             style: AppTextStyles.heading3.copyWith(fontSize: 16),
           ),
           const SizedBox(height: 6),
           Text(
-            'Connect your monitoring device to begin receiving temperature, vibration, and sound telemetry for "${appliance.name}".',
+            hasNoAppliance
+                ? 'Register an appliance to begin receiving temperature, vibration, and sound telemetry reports.'
+                : 'Connect your monitoring device to begin receiving temperature, vibration, and sound telemetry for "${appliance.name}".',
             style: AppTextStyles.subtitle,
             textAlign: TextAlign.center,
           ),
+          if (hasNoAppliance) ...[
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/add-appliance'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+              label: const Text('Add Appliance'),
+            ),
+          ],
         ],
       ),
     );

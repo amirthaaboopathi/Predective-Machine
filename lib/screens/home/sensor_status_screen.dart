@@ -27,6 +27,8 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
   void initState() {
     super.initState();
     _sensorService.fetchSensorReadings(widget.appliance.id);
+    // Ensure live telemetry generation and streaming starts for this machine when clicked
+    _sensorService.ensureLiveTelemetryForAppliance(widget.appliance);
   }
 
   IconData _getApplianceIcon(String type) {
@@ -76,6 +78,7 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
         final vib = liveTelemetry?.vibrationMagnitude ?? latestStored?.vibration ?? 0.16;
         final sound = liveTelemetry?.soundDb ?? latestStored?.sound ?? 48.0;
         final lastUpdate = liveTelemetry?.receivedAt ?? latestStored?.recordedAt ?? DateTime.now();
+        final relayOn = _hardwareService.relayState;
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -86,26 +89,81 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => Navigator.pop(context),
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                tooltip: 'Refresh Telemetry',
+                onPressed: () {
+                  _sensorService.fetchSensorReadings(widget.appliance.id);
+                  _sensorService.ensureLiveTelemetryForAppliance(widget.appliance);
+                },
+              ),
+            ],
           ),
           body: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Appliance Header Card
-                  _buildApplianceHeader(),
+                  _buildApplianceHeader(relayOn),
+                  const SizedBox(height: 20),
+
+                  // Power Relay Control for this appliance
+                  _buildRelayControlCard(relayOn),
                   const SizedBox(height: 24),
 
                   // Section Title
-                  Text(
-                    'Individual Sensor Readings',
-                    style: AppTextStyles.heading2.copyWith(fontSize: 18),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Live verified parameters for this machine',
-                    style: AppTextStyles.caption.copyWith(fontSize: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Individual Sensor Readings',
+                            style: AppTextStyles.heading2.copyWith(fontSize: 18),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Real-time physical telemetry parameters',
+                            style: AppTextStyles.caption.copyWith(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            const Text(
+                              'STREAMING',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF047857),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
 
@@ -119,6 +177,9 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                     referenceRange: '20.0 °C - 55.0 °C',
                     timestamp: lastUpdate,
                     progress: (temp / 100.0).clamp(0.0, 1.0),
+                    diagnosticNote: temp <= 55.0
+                        ? 'Thermal dissipation is within manufacturer design limits.'
+                        : 'Elevated thermal readings detected. Inspect cooling vents.',
                   ),
                   const SizedBox(height: 16),
 
@@ -132,6 +193,9 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                     referenceRange: '0.10 G - 0.40 G',
                     timestamp: lastUpdate,
                     progress: (vib / 1.5).clamp(0.0, 1.0),
+                    diagnosticNote: vib <= 0.40
+                        ? 'Stable rotor balance without abnormal harmonic oscillations.'
+                        : 'Vibration exceeds baseline. Check appliance leveling & mounting.',
                   ),
                   const SizedBox(height: 16),
 
@@ -145,8 +209,15 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
                     referenceRange: '30 dB - 62 dB',
                     timestamp: lastUpdate,
                     progress: (sound / 100.0).clamp(0.0, 1.0),
+                    diagnosticNote: sound <= 62.0
+                        ? 'Acoustic emissions are nominal without bearing noise or grinding.'
+                        : 'High acoustic noise detected. Inspect compressor or drive motor.',
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
+
+                  // Machine Health Card
+                  _buildSummaryCard(temp, vib, sound),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
@@ -156,7 +227,7 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
     );
   }
 
-  Widget _buildApplianceHeader() {
+  Widget _buildApplianceHeader(bool relayOn) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -175,8 +246,8 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               color: AppColors.primaryBlueLight,
               borderRadius: BorderRadius.circular(16),
@@ -208,6 +279,86 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
               ],
             ),
           ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: relayOn
+                  ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                  : Colors.grey.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              relayOn ? 'POWER ON' : 'STANDBY',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: relayOn ? const Color(0xFF047857) : Colors.grey[700],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRelayControlCard(bool relayOn) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderColor),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: relayOn
+                      ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                      : Colors.grey.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.power_settings_new_rounded,
+                  color: relayOn ? const Color(0xFF10B981) : Colors.grey[600],
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Appliance Power Control',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    relayOn ? 'Smart Relay active • Machine running' : 'Power cut • Relay de-energized',
+                    style: const TextStyle(fontSize: 11, color: AppColors.secondaryText),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Switch(
+            value: relayOn,
+            activeThumbColor: const Color(0xFF10B981),
+            onChanged: (val) {
+              _hardwareService.setRelay(val);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(val ? 'Appliance power switched ON' : 'Appliance power switched OFF'),
+                  duration: const Duration(seconds: 1),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -222,6 +373,7 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
     required String referenceRange,
     required DateTime timestamp,
     required double progress,
+    required String diagnosticNote,
   }) {
     Color statusColor;
     if (status == 'Optimal') {
@@ -327,6 +479,28 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
           ),
           const SizedBox(height: 12),
 
+          // Micro-diagnostic Note
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    diagnosticNote,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
           // Timestamp Footer
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -343,5 +517,55 @@ class _SensorStatusScreenState extends State<SensorStatusScreen> {
       ),
     );
   }
-}
 
+  Widget _buildSummaryCard(double temp, double vib, double sound) {
+    final isNormal = temp <= 55 && vib <= 0.40 && sound <= 62;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isNormal ? const Color(0xFFECFDF5) : const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isNormal ? const Color(0xFF10B981).withValues(alpha: 0.3) : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isNormal ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+            color: isNormal ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+            size: 28,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isNormal ? 'Operating within Verified Limits' : 'Attention Recommended',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isNormal ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isNormal
+                      ? 'All thermal, vibration, and acoustic telemetry points are healthy.'
+                      : 'One or more sensor parameters are nearing alert thresholds.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isNormal ? const Color(0xFF047857) : const Color(0xFFB45309),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
