@@ -9,7 +9,7 @@ class AppConstants {
   static const String supabaseAnonKey = 'sb_publishable_cAWNuGx3JYV1zfee1qMxEQ__15qt_3w';
   
   // Gemini AI Configuration
-  static const String _defaultEncodedKey = 'QVEuQWI4Uk42TFA4ZjdFRU5zYy1uTmpJU09SNGphMG5EaFFBYVJMdG9RVG91bFZpVEUwemc=';
+  static const String _defaultEncodedKey = 'QVEuQWI4Uk42SjdDeURKNDdxVVVIWmdlR3NMeThOd1VQYjROTE1RUUh0NGtuZXlhU2Q1c0E=';
   
   static String get geminiApiKey {
     const envKey = String.fromEnvironment('GEMINI_API_KEY');
