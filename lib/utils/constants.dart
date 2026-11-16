@@ -9,7 +9,7 @@ class AppConstants {
   static const String supabaseAnonKey = 'sb_publishable_cAWNuGx3JYV1zfee1qMxEQ__15qt_3w';
   
   // Gemini AI Configuration
-  static const String _defaultEncodedKey = 'QVEuQWI4Uk42SjdDeURKNDdxVVVIWmdlR3NMeThOd1VQYjROTE1RUUh0NGtuZXlhU2Q1c0E=';
+  static const String _defaultEncodedKey = 'QVEuQWI4Uk42STdrSmNucVNjZzViTlZRZ1YwTkMxYnhYMk9iZVg4VmV4OXVkLUpXenQwY2c=';
   
   static String get geminiApiKey {
     const envKey = String.fromEnvironment('GEMINI_API_KEY');
@@ -21,8 +21,14 @@ class AppConstants {
     }
   }
 
-  static const String geminiModel = 'gemini-3.8-flash';
+  static const String geminiModel = 'gemini-1.5-flash';
   static const String geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+  // FastAPI Python Backend Configuration
+  static const String backendBaseUrl = String.fromEnvironment(
+    'BACKEND_URL',
+    defaultValue: 'http://127.0.0.1:8000',
+  );
 
   // Appliance types list
   static const List<String> applianceTypes = [
