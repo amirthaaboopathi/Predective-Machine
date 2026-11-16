@@ -241,7 +241,9 @@ class _ChatbotScreenState extends State<ChatbotScreen>
                     Text(
                       scoped != null
                           ? 'Focus: ${scoped.name}'
-                          : 'Online • Gemini 3.8 Flash',
+                          : (_chatService.isLastResponseOffline
+                              ? 'Edge Diagnostics • Offline Mode'
+                              : 'AI Assistant • Dual-Mode Active'),
                       style: AppTextStyles.caption.copyWith(
                         fontSize: 11,
                         color: AppColors.secondaryText,
