@@ -18,7 +18,13 @@ class ApplianceService extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
+  SupabaseClient? get _supabase {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
 
   List<ApplianceModel> get appliances => List.unmodifiable(_appliances);
   bool get hasAppliances => _appliances.isNotEmpty;
@@ -74,9 +80,10 @@ class ApplianceService extends ChangeNotifier {
     try {
       await init();
 
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        final response = await _supabase
+      final client = _supabase;
+      final user = client?.auth.currentUser;
+      if (client != null && user != null) {
+        final response = await client
             .from('appliances')
             .select()
             .eq('user_id', user.id)
@@ -111,7 +118,8 @@ class ApplianceService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = _supabase.auth.currentUser;
+      final client = _supabase;
+      final user = client?.auth.currentUser;
       final effectiveUserId = user?.id ?? 'local_user';
       final port = assignedPort ?? appliance.hardwarePort ?? 'COM3';
 
@@ -123,10 +131,10 @@ class ApplianceService extends ChangeNotifier {
       ApplianceModel savedAppliance = applianceWithUser;
 
       // Attempt cloud insert if authenticated
-      if (user != null) {
+      if (client != null && user != null) {
         try {
           final payload = applianceWithUser.toMap();
-          final response = await _supabase
+          final response = await client
               .from('appliances')
               .insert(payload)
               .select()
@@ -169,7 +177,7 @@ class ApplianceService extends ChangeNotifier {
   }) async {
     final newAppliance = ApplianceModel(
       id: 'app_${DateTime.now().millisecondsSinceEpoch}',
-      userId: _supabase.auth.currentUser?.id ?? 'local_user',
+      userId: _supabase?.auth.currentUser?.id ?? 'local_user',
       name: name,
       type: type,
       brand: brand ?? 'Smart Device',
@@ -206,10 +214,11 @@ class ApplianceService extends ChangeNotifier {
   Future<void> removeAppliance(String id) async {
     try {
       await HardwareMappingService().unbindAppliance(id);
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
+      final client = _supabase;
+      final user = client?.auth.currentUser;
+      if (client != null && user != null) {
         try {
-          await _supabase
+          await client
               .from('appliances')
               .delete()
               .eq('id', id)

@@ -28,7 +28,13 @@ class SensorService extends ChangeNotifier {
   String? _fetchAllError;
   DateTime? _lastPersistTime;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
+  SupabaseClient? get _supabase {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
 
   List<SensorReadingModel> get allReadings => List.unmodifiable(_allReadings);
   bool get isFetchingAll => _isFetchingAll;
@@ -242,8 +248,16 @@ class SensorService extends ChangeNotifier {
     _fetchAllError = null;
     notifyListeners();
 
+    final client = _supabase;
+    if (client == null) {
+      if (_allReadings.isEmpty) await init();
+      _isFetchingAll = false;
+      notifyListeners();
+      return _allReadings;
+    }
+
     try {
-      final response = await _supabase
+      final response = await client
           .from('sensor_readings')
           .select()
           .order('recorded_at', ascending: false)
@@ -284,8 +298,15 @@ class SensorService extends ChangeNotifier {
     _errorMap[applianceId] = null;
     notifyListeners();
 
+    final client = _supabase;
+    if (client == null) {
+      _loadingMap[applianceId] = false;
+      notifyListeners();
+      return _readingsMap[applianceId] ?? [];
+    }
+
     try {
-      final response = await _supabase
+      final response = await client
           .from('sensor_readings')
           .select()
           .eq('appliance_id', applianceId)
@@ -330,19 +351,22 @@ class SensorService extends ChangeNotifier {
     );
 
     // Sync to Supabase in background
-    try {
-      final payload = {
-        'appliance_id': applianceId,
-        'appliance_name': applianceName,
-        'temperature': temperature,
-        'vibration': vibration,
-        'sound': sound,
-        'recorded_at': reading.recordedAt.toIso8601String(),
-      };
+    final client = _supabase;
+    if (client != null) {
+      try {
+        final payload = {
+          'appliance_id': applianceId,
+          'appliance_name': applianceName,
+          'temperature': temperature,
+          'vibration': vibration,
+          'sound': sound,
+          'recorded_at': reading.recordedAt.toIso8601String(),
+        };
 
-      await _supabase.from('sensor_readings').insert(payload);
-    } catch (e) {
-      debugPrint('Notice: Cloud sync skipped or restricted by policy: $e');
+        await client.from('sensor_readings').insert(payload);
+      } catch (e) {
+        debugPrint('Notice: Cloud sync skipped or restricted by policy: $e');
+      }
     }
 
     return reading;
